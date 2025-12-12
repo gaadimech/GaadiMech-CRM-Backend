@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>GaadiMech CRM Portal - Today's Leads</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        /* Header with brand */
+        .brand-header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: none;
+            padding: 15px 0;
+            margin-bottom: 0;
+        }
+        
+        .brand-header .navbar-brand {
+            color: white;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-decoration: none;
+        }
+        
+        .brand-header .navbar-brand:hover {
+            color: #f8f9fa;
+        }
+        
+        .user-info {
+            color: white;
+            margin-right: 15px;
+        }
+        
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 25px;
+            padding: 8px 20px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            transform: translateY(-1px);
+        }
+        
+        /* Navigation Tabs */
+        .nav-tabs-container {
+            background: white;
+            margin: 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .nav-tabs {
+            border-bottom: none;
+            padding: 0 20px;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: #666;
+            font-weight: 600;
+            padding: 20px 30px;
+            border-radius: 0;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: #667eea;
+            background: transparent;
+            border: none;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: #667eea;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .nav-tabs .nav-link i {
+            margin-right: 8px;
+        }
+        
+        /* Main content area */
+        .content-container {
+            background: white;
+            margin: 0;
+            min-height: calc(100vh - 150px);
+            padding: 30px;
+        }
+        
+        /* Lead card styling */
+        .lead-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .lead-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .lead-card .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 20px;
+            border-radius: 15px 15px 0 0;
+        }
+        
+        .lead-card .card-body {
+            padding: 20px;
+        }
+        
+        .lead-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .lead-info i {
+            width: 20px;
+            margin-right: 10px;
+            color: #667eea;
+        }
+        
+        .lead-info strong {
+            color: #333;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .action-buttons .btn {
+            border-radius: 25px;
+            padding: 8px 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-call {
+            background: #28a745;
+            border: none;
+            color: white;
+        }
+        
+        .btn-call:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+        
+        .btn-whatsapp {
+            background: #25d366;
+            border: none;
+            color: white;
+        }
+        
+        .btn-whatsapp:hover {
+            background: #22c55e;
+            transform: translateY(-1px);
+        }
+        
+        .btn-add-crm {
+            background: #667eea;
+            border: none;
+            color: white;
+        }
+        
+        .btn-add-crm:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+        }
+        
+        .btn-add-crm:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .badge {
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border-radius: 20px;
+        }
+        
+        .badge-assigned {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .badge-contacted {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .badge-crm {
+            background: #28a745;
+            color: white;
+        }
+        
+        .badge-ignored {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .alert {
+            border-radius: 10px;
+            border: none;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: #dee2e6;
+        }
+        
+        .empty-state h5 {
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+        
+        .empty-state p {
+            color: #adb5bd;
+        }
+        
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .stats-card .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stats-card .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        /* Remarks formatting */
+        .remarks-box {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            color: #495057;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        
+        .remarks-toggle {
+            font-size: 0.8rem;
+            text-decoration: none;
+            margin-top: 5px;
+            display: inline-block;
+        }
+        
+        .remarks-toggle:hover {
+            text-decoration: underline;
+        }
+        
+        /* Consistent card sizing */
+        .lead-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .lead-card .card-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .action-buttons {
+            margin-top: auto;
+            padding-top: 15px;
+        }
+        
+        /* CRM Status Badge */
+        .action-buttons .badge {
+            border-radius: 25px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .action-buttons .badge i {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <nav class="navbar brand-header">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-car"></i>
+                GaadiMech CRM Portal
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="user-info">Welcome, {{ current_user.name }}</span>
+                <a href="{{ url_for('logout') }}" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs-container">
+        <ul class="nav nav-tabs">
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('index') }}">
+                    <i class="fas fa-plus"></i>
+                    Add Lead
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('dashboard') }}">
+                    <i class="fas fa-tachometer-alt"></i>
+                    Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('followups') }}">
+                    <i class="fas fa-calendar-check"></i>
+                    View Followups
+                </a>
+            </li>
+            {% if current_user.is_admin %}
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('admin_leads') }}">
+                    <i class="fas fa-users-cog"></i>
+                    Admin Leads
+                </a>
+            </li>
+            {% else %}
+            <li class="nav-item">
+                <a class="nav-link active" href="{{ url_for('team_leads') }}">
+                    <i class="fas fa-tasks"></i>
+                    Today's Leads
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content-container">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Stats Card -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="stats-card">
+                    <div class="row">
+                        <div class="col-md-3 text-center">
+                            <div class="stat-number">{{ assignments|length }}</div>
+                            <div class="stat-label">Total Assigned</div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <div class="stat-number">{{ assignments|selectattr('status', 'equalto', 'Assigned')|list|length }}</div>
+                            <div class="stat-label">Pending</div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <div class="stat-number">{{ assignments|selectattr('status', 'equalto', 'Contacted')|list|length }}</div>
+                            <div class="stat-label">Contacted</div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <div class="stat-number">{{ assignments|selectattr('added_to_crm', 'equalto', true)|list|length }}</div>
+                            <div class="stat-label">Added to CRM</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's Leads -->
+        <div class="row">
+            <div class="col-12">
+                <h3 class="mb-4">
+                    <i class="fas fa-calendar-day"></i>
+                    Today's Assigned Leads - {{ today.strftime('%B %d, %Y') }}
+                </h3>
+                
+                <!-- Filters -->
+                <div class="card mb-4" style="border: 1px solid #e0e0e0;">
+                    <div class="card-header" style="background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">
+                        <h6 class="mb-0">
+                            <i class="fas fa-filter"></i>
+                            Filter Leads
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <form method="GET" action="{{ url_for('team_leads') }}">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label for="created_date" class="form-label">Created Date</label>
+                                    <input type="date" class="form-control" id="created_date" name="created_date" 
+                                           value="{{ request.args.get('created_date', '') }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="search" class="form-label">Search Customer/Car</label>
+                                    <input type="text" class="form-control" id="search" name="search" 
+                                           value="{{ request.args.get('search', '') }}" 
+                                           placeholder="Enter customer name or car model">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <div class="btn-group w-100">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-filter"></i> Filter
+                                        </button>
+                                        <a href="{{ url_for('team_leads') }}" class="btn btn-secondary">
+                                            <i class="fas fa-times"></i> Clear
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                {% if assignments %}
+                    <div class="row">
+                        {% for assignment in assignments %}
+                            <div class="col-lg-6 col-xl-4">
+                                <div class="card lead-card">
+                                    <div class="card-header">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-user"></i>
+                                                {{ assignment.unassigned_lead.customer_name or 'Unknown Customer' }}
+                                            </h6>
+                                            <span class="badge badge-{{ 'assigned' if assignment.status == 'Assigned' else 'contacted' if assignment.status == 'Contacted' else 'crm' if assignment.added_to_crm else 'ignored' }}">
+                                                {{ assignment.status }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="lead-info">
+                                            <i class="fas fa-phone"></i>
+                                            <strong>Mobile:</strong> {{ assignment.unassigned_lead.mobile }}
+                                        </div>
+                                        
+                                        {% if assignment.unassigned_lead.car_manufacturer %}
+                                        <div class="lead-info">
+                                            <i class="fas fa-car"></i>
+                                            <strong>Car:</strong> {{ assignment.unassigned_lead.car_manufacturer }}
+                                            {% if assignment.unassigned_lead.car_model %}
+                                                {{ assignment.unassigned_lead.car_model }}
+                                            {% endif %}
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if assignment.unassigned_lead.service_type %}
+                                        <div class="lead-info">
+                                            <i class="fas fa-wrench"></i>
+                                            <strong>Service:</strong> {{ assignment.unassigned_lead.service_type }}
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if assignment.unassigned_lead.pickup_type %}
+                                        <div class="lead-info">
+                                            <i class="fas fa-truck"></i>
+                                            <strong>Type:</strong> {{ assignment.unassigned_lead.pickup_type }}
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if assignment.unassigned_lead.scheduled_date %}
+                                        <div class="lead-info">
+                                            <i class="fas fa-calendar"></i>
+                                            <strong>Scheduled:</strong> {{ assignment.unassigned_lead.scheduled_date.strftime('%Y-%m-%d') }}
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if assignment.unassigned_lead.source %}
+                                        <div class="lead-info">
+                                            <i class="fas fa-globe"></i>
+                                            <strong>Source:</strong> {{ assignment.unassigned_lead.source }}
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if assignment.unassigned_lead.remarks %}
+                                        <div class="lead-info">
+                                            <i class="fas fa-sticky-note"></i>
+                                            <strong>Remarks:</strong>
+                                        </div>
+                                        <div class="remarks-box">
+                                            {% set remarks_text = assignment.unassigned_lead.remarks %}
+                                            {% if remarks_text|length > 100 %}
+                                                <div class="remarks-short">{{ remarks_text[:100] }}...</div>
+                                                <div class="remarks-full" style="display: none;">{{ remarks_text }}</div>
+                                                <a href="#" class="remarks-toggle text-primary" onclick="toggleRemarks(this); return false;">
+                                                    <small>Show More</small>
+                                                </a>
+                                            {% else %}
+                                                {{ remarks_text }}
+                                            {% endif %}
+                                        </div>
+                                        {% endif %}
+                                        
+                                        <hr>
+                                        
+                                        <div class="action-buttons">
+                                            <a href="tel:{{ assignment.unassigned_lead.mobile }}" class="btn btn-call btn-sm">
+                                                <i class="fas fa-phone"></i>
+                                                Call
+                                            </a>
+                                            <button class="btn btn-whatsapp btn-sm" onclick="openWhatsApp('{{ assignment.unassigned_lead.mobile }}')">
+                                                <i class="fab fa-whatsapp"></i>
+                                                WhatsApp
+                                            </button>
+                                            {% if not assignment.added_to_crm %}
+                                            <button type="button" class="btn btn-add-crm btn-sm" onclick="showAddToCrmModal({{ assignment.id }})">
+                                                <i class="fas fa-plus"></i>
+                                                Add to CRM
+                                            </button>
+                                            {% else %}
+                                            <span class="badge bg-success fs-6 py-2 px-3">
+                                                <i class="fas fa-check-circle"></i>
+                                                Added to CRM
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-calendar-times"></i>
+                        <h5>No leads assigned for today</h5>
+                        <p>Check back later or contact your admin for new lead assignments.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Add to CRM Modal -->
+    <div class="modal fade" id="addToCrmModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2"></i>Add Lead to CRM
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addToCrmForm">
+                        <input type="hidden" id="assignmentId">
+                        
+                        <div class="mb-3">
+                            <label for="crmCustomerName" class="form-label">
+                                <i class="fas fa-user"></i> Customer Name
+                            </label>
+                            <input type="text" class="form-control" id="crmCustomerName" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="crmMobileNumber" class="form-label">
+                                <i class="fas fa-phone"></i> Mobile Number
+                            </label>
+                            <input type="text" class="form-control" id="crmMobileNumber" required>
+                            <div class="form-text">Enter 10 or 12 digits only (no + required)</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="crmCarRegistration" class="form-label">
+                                <i class="fas fa-car"></i> Car Registration Number
+                            </label>
+                            <input type="text" class="form-control" id="crmCarRegistration" placeholder="E.G., MH12AB1234">
+                            <div class="form-text">Optional: Enter vehicle registration number</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="crmFollowupDate" class="form-label">
+                                <i class="fas fa-calendar"></i> Follow-up Date
+                            </label>
+                            <input type="date" class="form-control" id="crmFollowupDate" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="crmStatus" class="form-label">
+                                <i class="fas fa-info-circle"></i> Status
+                            </label>
+                            <select class="form-select" id="crmStatus" required>
+                                <option value="Needs Followup">Needs Followup</option>
+                                <option value="Did Not Pick Up">Did Not Pick Up</option>
+                                <option value="Confirmed">Confirmed</option>
+                                <option value="Open">Open</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Feedback">Feedback</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="crmRemarks" class="form-label">
+                                <i class="fas fa-comment"></i> Remarks
+                            </label>
+                            <textarea class="form-control" id="crmRemarks" rows="4"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveAddToCrm()">
+                        <i class="fas fa-plus"></i> Add to CRM
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto" id="toastTitle">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastBody">
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="position-fixed top-50 start-50 translate-middle" style="display: none; z-index: 9999;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function openWhatsApp(mobile) {
+            // Clean mobile number
+            var cleanMobile = mobile.replace(/[^\d]/g, '');
+            if (cleanMobile.length === 10) {
+                cleanMobile = '91' + cleanMobile;
+            }
+            
+            // Detect if mobile device
+            var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            var whatsappUrl;
+            if (isMobile) {
+                whatsappUrl = 'whatsapp://send?phone=' + cleanMobile;
+            } else {
+                whatsappUrl = 'https://web.whatsapp.com/send?phone=' + cleanMobile;
+            }
+            
+            window.open(whatsappUrl, '_blank');
+        }
+        
+        function toggleRemarks(element) {
+            const remarksBox = element.parentElement;
+            const shortText = remarksBox.querySelector('.remarks-short');
+            const fullText = remarksBox.querySelector('.remarks-full');
+            
+            if (fullText.style.display === 'none') {
+                shortText.style.display = 'none';
+                fullText.style.display = 'block';
+                element.innerHTML = '<small>Show Less</small>';
+            } else {
+                shortText.style.display = 'block';
+                fullText.style.display = 'none';
+                element.innerHTML = '<small>Show More</small>';
+            }
+        }
+
+        function showLoading(show) {
+            const spinner = document.getElementById('loadingSpinner');
+            if (show) {
+                spinner.style.display = 'block';
+            } else {
+                spinner.style.display = 'none';
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastBody = document.getElementById('toastBody');
+            const toastTitle = document.getElementById('toastTitle');
+            
+            toastBody.textContent = message;
+            
+            // Set toast style based on type
+            toast.className = 'toast';
+            if (type === 'success') {
+                toast.classList.add('bg-success', 'text-white');
+                toastTitle.textContent = 'Success';
+            } else if (type === 'error') {
+                toast.classList.add('bg-danger', 'text-white');
+                toastTitle.textContent = 'Error';
+            } else {
+                toast.classList.add('bg-info', 'text-white');
+                toastTitle.textContent = 'Info';
+            }
+            
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+        }
+
+        function showAddToCrmModal(assignmentId) {
+            showLoading(true);
+            fetch(`/api/team-leads/assignment/${assignmentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('assignmentId').value = assignmentId;
+                        document.getElementById('crmCustomerName').value = data.customer_name;
+                        document.getElementById('crmMobileNumber').value = data.mobile;
+                        document.getElementById('crmCarRegistration').value = data.car_registration || '';
+                        document.getElementById('crmFollowupDate').value = data.followup_date;
+                        document.getElementById('crmStatus').value = data.status;
+                        document.getElementById('crmRemarks').value = data.remarks || '';
+                        new bootstrap.Modal(document.getElementById('addToCrmModal')).show();
+                    } else {
+                        showToast(data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    showToast('Error fetching assignment details', 'error');
+                })
+                .finally(() => {
+                    showLoading(false);
+                });
+        }
+
+        function saveAddToCrm() {
+            const assignmentId = document.getElementById('assignmentId').value;
+            const customerName = document.getElementById('crmCustomerName').value;
+            const mobileNumber = document.getElementById('crmMobileNumber').value;
+            const carRegistration = document.getElementById('crmCarRegistration').value;
+            const followupDate = document.getElementById('crmFollowupDate').value;
+            const status = document.getElementById('crmStatus').value;
+            const remarks = document.getElementById('crmRemarks').value;
+
+            if (!customerName || !mobileNumber) {
+                showToast('Customer Name and Mobile Number are required', 'error');
+                return;
+            }
+
+            if (!followupDate) {
+                showToast('Follow-up Date is required', 'error');
+                return;
+            }
+
+            showLoading(true);
+            fetch(`/api/team-leads/add-to-crm/${assignmentId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    customer_name: customerName,
+                    mobile: mobileNumber,
+                    car_registration: carRegistration,
+                    followup_date: followupDate,
+                    status: status,
+                    remarks: remarks
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('addToCrmModal')).hide();
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error adding lead to CRM', 'error');
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+        }
+    </script>
+</body>
+</html> 

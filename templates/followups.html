@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>GaadiMech CRM - Followups</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        /* Header with brand */
+        .brand-header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: none;
+            padding: 15px 0;
+            margin-bottom: 0;
+        }
+        
+        .brand-header .navbar-brand {
+            color: white;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-decoration: none;
+        }
+        
+        .brand-header .navbar-brand:hover {
+            color: #f8f9fa;
+        }
+        
+        .user-info {
+            color: white;
+            margin-right: 15px;
+        }
+        
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 25px;
+            padding: 8px 20px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            transform: translateY(-1px);
+        }
+        
+        /* Navigation Tabs */
+        .nav-tabs-container {
+            background: white;
+            margin: 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .nav-tabs {
+            border-bottom: none;
+            padding: 0 20px;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: #666;
+            font-weight: 600;
+            padding: 20px 30px;
+            border-radius: 0;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: #667eea;
+            background: transparent;
+            border: none;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: #667eea;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .nav-tabs .nav-link i {
+            margin-right: 8px;
+        }
+        
+        /* Main content area */
+        .content-container {
+            background: white;
+            margin: 0;
+            min-height: calc(100vh - 150px);
+            padding: 30px;
+        }
+        
+        /* Button fixes for visibility */
+        .btn {
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white !important;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            color: white !important;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border: none;
+            color: white !important;
+        }
+        
+        .btn-success:hover {
+            background: linear-gradient(135deg, #3d8bfe 0%, #00d4fe 100%);
+            color: white !important;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border: none;
+            color: white !important;
+        }
+        
+        .btn-warning:hover {
+            background: linear-gradient(135deg, #ee7efb 0%, #f44256 100%);
+            color: white !important;
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            border: none;
+            color: white !important;
+        }
+        
+        .btn-info:hover {
+            background: linear-gradient(135deg, #2ed96a 0%, #20e6c7 100%);
+            color: white !important;
+        }
+        
+        .btn-outline-primary {
+            border: 2px solid #667eea;
+            color: #667eea !important;
+            background: white;
+        }
+        
+        .btn-outline-primary:hover {
+            background: #667eea;
+            color: white !important;
+        }
+        
+        .whatsapp-btn {
+            background-color: #25D366 !important;
+            border-color: #25D366 !important;
+            color: white !important;
+        }
+        
+        .whatsapp-btn:hover {
+            background-color: #128C7E !important;
+            border-color: #128C7E !important;
+            color: white !important;
+        }
+
+        /* Mobile-optimized navigation */
+        .navbar {
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+        
+        .nav-link {
+            font-weight: 500;
+            padding: 0.75rem 1rem !important;
+        }
+
+        /* Card styling */
+        .main-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 20px;
+        }
+
+        .card-header h5 {
+            margin: 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Form styling */
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .form-label i {
+            margin-right: 8px;
+            width: 16px;
+            color: #667eea;
+        }
+
+        .form-control, .form-select {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px; /* Prevents zoom on iOS */
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+
+        .btn {
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        /* Mobile responsive tables */
+        .mobile-table {
+            display: none;
+        }
+
+        .mobile-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+        }
+
+        .mobile-card-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .mobile-card-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #333;
+        }
+
+        .mobile-card-subtitle {
+            font-size: 0.9rem;
+            color: #666;
+            margin: 5px 0;
+        }
+
+        .mobile-card-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 15px;
+        }
+
+        .mobile-card-actions .btn {
+            font-size: 0.8rem;
+            padding: 6px 12px;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+
+        .whatsapp-btn {
+            background-color: #25D366;
+            border-color: #25D366;
+            color: white;
+        }
+
+        .whatsapp-btn:hover {
+            background-color: #128C7E;
+            border-color: #128C7E;
+            color: white;
+        }
+
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+
+            /* Hide desktop table, show mobile cards */
+            .table-responsive {
+                display: none;
+            }
+
+            .mobile-table {
+                display: block;
+            }
+
+            /* Mobile navigation */
+            .navbar-nav .nav-link {
+                text-align: center;
+                padding: 12px 16px !important;
+            }
+
+            .navbar-collapse {
+                background: rgba(255,255,255,0.95);
+                margin-top: 10px;
+                border-radius: 10px;
+                padding: 10px;
+            }
+
+            /* Card adjustments */
+            .card-body {
+                padding: 15px;
+            }
+
+            .card-header {
+                padding: 15px;
+            }
+
+            /* Search form mobile layout */
+            .search-form .row {
+                margin: 0;
+            }
+
+            .search-form .col-md-4 {
+                padding: 5px;
+                margin-bottom: 10px;
+            }
+
+            .search-form .btn {
+                width: 100%;
+                margin-bottom: 8px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .navbar-brand {
+                font-size: 1rem;
+            }
+
+            .mobile-card {
+                padding: 12px;
+            }
+
+            .mobile-card-actions .btn {
+                font-size: 0.75rem;
+                padding: 5px 10px;
+            }
+        }
+
+        /* Touch-friendly sizing */
+        @media (pointer: coarse) {
+            .btn {
+                min-height: 44px;
+                padding: 8px 16px;
+            }
+
+            .form-control, .form-select {
+                min-height: 44px;
+            }
+
+            .nav-link {
+                min-height: 44px;
+            }
+
+            .mobile-card-actions .btn {
+                min-height: 36px;
+            }
+        }
+
+        /* Mobile-first optimizations */
+        .container-fluid {
+            padding: 10px;
+        }
+        
+        .table-responsive {
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-table {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-table {
+                display: block !important;
+            }
+            
+            .table-responsive {
+                display: none !important;
+            }
+        }
+
+        .mobile-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #007bff;
+        }
+
+        .mobile-card-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .mobile-card-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #333;
+        }
+
+        .mobile-card-subtitle {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .mobile-card-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .mobile-card-actions .btn {
+            font-size: 0.8rem;
+            padding: 5px 10px;
+        }
+
+        .whatsapp-btn {
+            background-color: #25D366;
+            border-color: #25D366;
+            color: white;
+        }
+
+        .whatsapp-btn:hover {
+            background-color: #128C7E;
+            border-color: #128C7E;
+            color: white;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+        }
+
+        /* Toast positioning */
+        .alert.position-fixed {
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+
+        /* WhatsApp Template Modal Styles */
+        .template-option {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid #e9ecef;
+        }
+        
+        .template-option:hover {
+            border-color: #25D366;
+            box-shadow: 0 4px 12px rgba(37, 211, 102, 0.15);
+        }
+        
+        .template-option.selected {
+            border-color: #25D366 !important;
+            background-color: rgba(37, 211, 102, 0.1) !important;
+            box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
+        }
+        
+        .template-preview {
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.4;
+        }
+        
+        .template-option .form-check-input {
+            pointer-events: none;
+        }
+        
+        .template-option label {
+            pointer-events: none;
+            cursor: pointer;
+        }
+        
+        #whatsappTemplateModal .modal-dialog {
+            max-width: 700px;
+        }
+        
+        #whatsappTemplateModal .modal-body {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Brand Header -->
+    <nav class="navbar brand-header">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-tools me-2"></i>GaadiMech CRM
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="user-info">
+                    <i class="fas fa-user me-1"></i>{{ current_user.name }}
+                </span>
+                <a href="{{ url_for('logout') }}" class="logout-btn">
+                    <i class="fas fa-sign-out-alt me-1"></i>Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs-container">
+        <div class="container">
+            <ul class="nav nav-tabs">
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('dashboard') }}">
+                        <i class="fas fa-tachometer-alt"></i>Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('index') }}">
+                        <i class="fas fa-plus"></i>Add Lead
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="{{ url_for('followups') }}">
+                        <i class="fas fa-calendar-check"></i>View Followups
+                    </a>
+                </li>
+                {% if current_user.is_admin %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('admin_leads') }}">
+                        <i class="fas fa-users-cog"></i>Admin Leads
+                    </a>
+                </li>
+                {% else %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('team_leads') }}">
+                        <i class="fas fa-tasks"></i>Today's Leads
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content-container">
+        <div class="container">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+                            <i class="fas fa-info-circle me-2"></i>{{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Search Card -->
+            <div class="card main-card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-search me-2"></i>Search Followups
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="GET" action="{{ url_for('followups') }}" class="search-form">
+                        <div class="row g-3">
+                            <div class="col-md-4 col-sm-6">
+                                <label for="team_member" class="form-label">
+                                    <i class="fas fa-users"></i>Team Member
+                                </label>
+                                <select class="form-select" id="team_member" name="user_id">
+                                    <option value="">All Team Members</option>
+                                    {% for user in users %}
+                                    <option value="{{ user.id }}" {% if selected_user_id|string == user.id|string %}selected{% endif %}>
+                                        {{ user.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="col-md-4 col-sm-6">
+                                <label for="followup_date" class="form-label">
+                                    <i class="fas fa-calendar-alt"></i>Followup Date
+                                </label>
+                                <input type="date" class="form-control" id="followup_date" name="date" 
+                                       value="{{ request.args.get('date', '') }}">
+                            </div>
+
+                            <div class="col-md-4 col-sm-6">
+                                <label for="created_date" class="form-label">
+                                    <i class="fas fa-calendar-plus"></i>Created Date
+                                </label>
+                                <input type="date" class="form-control" id="created_date" name="created_date" 
+                                       value="{{ request.args.get('created_date', '') }}">
+                            </div>
+
+                            {% if current_user.is_admin %}
+                            <div class="col-md-4 col-sm-6">
+                                <label for="modified_date" class="form-label">
+                                    <i class="fas fa-calendar-edit"></i>Modified Date
+                                </label>
+                                <input type="date" class="form-control" id="modified_date" name="modified_date" 
+                                       value="{{ request.args.get('modified_date', '') }}">
+                            </div>
+                            {% endif %}
+
+                            <div class="col-md-4 col-sm-6">
+                                <label for="car_registration" class="form-label">
+                                    <i class="fas fa-car"></i>Car Registration
+                                </label>
+                                <input type="text" class="form-control" id="car_registration" name="car_registration" 
+                                       value="{{ request.args.get('car_registration', '') }}"
+                                       placeholder="Enter registration number" style="text-transform: uppercase;">
+                            </div>
+
+                            <div class="col-md-4 col-sm-6">
+                                <label for="mobile" class="form-label">
+                                    <i class="fas fa-phone"></i>Mobile Number
+                                </label>
+                                <input type="tel" class="form-control" id="mobile" name="mobile" 
+                                       value="{{ request.args.get('mobile', '') }}"
+                                       placeholder="Enter mobile number">
+                            </div>
+
+                            <div class="col-md-4 col-sm-6">
+                                <label for="status" class="form-label">
+                                    <i class="fas fa-flag"></i>Status
+                                </label>
+                                <select class="form-select" id="status" name="status">
+                                    <option value="">All Status</option>
+                                    <option value="Did Not Pick Up" {% if request.args.get('status') == 'Did Not Pick Up' %}selected{% endif %}>Did Not Pick Up</option>
+                                    <option value="Needs Followup" {% if request.args.get('status') == 'Needs Followup' %}selected{% endif %}>Needs Followup</option>
+                                    <option value="Confirmed" {% if request.args.get('status') == 'Confirmed' %}selected{% endif %}>Confirmed</option>
+                                    <option value="Open" {% if request.args.get('status') == 'Open' %}selected{% endif %}>Open</option>
+                                    <option value="Completed" {% if request.args.get('status') == 'Completed' %}selected{% endif %}>Completed</option>
+                                    <option value="Feedback" {% if request.args.get('status') == 'Feedback' %}selected{% endif %}>Feedback</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex flex-column flex-md-row gap-2 mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search me-1"></i>Search
+                            </button>
+                            <a href="{{ url_for('followups') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Reset
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        
+            <!-- Results Card -->
+            <div class="card main-card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list me-2"></i>
+                        {% if current_user.is_admin %}
+                            {% if selected_user_id %}
+                                {% for user in users %}
+                                    {% if user.id|string == selected_user_id|string %}
+                                        Leads for {{ user.name }}
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                All Team Leads
+                            {% endif %}
+                        {% else %}
+                            Your Leads
+                        {% endif %}
+                        {% if followups_pagination %}
+                            <span class="badge bg-light text-dark ms-2">{{ followups_pagination.total }} total leads</span>
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if followups %}
+                        <!-- Desktop Table -->
+                        <div class="table-responsive d-none d-md-block">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Customer Name</th>
+                                        <th>Mobile</th>
+                                        <th>Followup Date</th>
+                                        <th>Status</th>
+                                        <th>Remarks</th>
+                                        <th>Created Date</th>
+                                        {% if current_user.is_admin %}
+                                            <th>Modified Date</th>
+                                            <th>Created By</th>
+                                        {% endif %}
+                                        <th>Car Registration</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for followup in followups %}
+                                        <tr>
+                                            <td><strong>{{ followup.customer_name }}</strong></td>
+                                            <td>
+                                                <a href="javascript:void(0);" onclick="copyToDialer('{{ followup.mobile }}')" 
+                                                   class="text-decoration-none fw-bold">{{ followup.mobile }}</a>
+                                            </td>
+                                            <td>{{ followup.followup_date.strftime('%d-%b-%Y') }}</td>
+                                            <td>
+                                                <span class="badge status-badge {% if followup.status == 'Confirmed' %}bg-success{% elif followup.status == 'Did Not Pick Up' %}bg-danger{% elif followup.status == 'Completed' %}bg-info{% else %}bg-warning{% endif %}">
+                                                    {{ followup.status }}
+                                                </span>
+                                            </td>
+                                            <td><small>{{ followup.remarks or 'No remarks' }}</small></td>
+                                            <td><small>{{ followup.created_at.strftime('%d-%b-%Y %I:%M %p') }}</small></td>
+                                            {% if current_user.is_admin %}
+                                                <td><small>{{ followup.modified_at.strftime('%d-%b-%Y %I:%M %p') }}</small></td>
+                                                <td><strong>{{ followup.creator.name }}</strong></td>
+                                            {% endif %}
+                                            <td>{{ followup.car_registration or '-' }}</td>
+                                            <td>
+                                                <div class="d-flex gap-1">
+                                                    <button class="btn btn-success btn-sm" onclick="showWhatsAppTemplateModal('{{ followup.mobile }}')" title="WhatsApp">
+                                                        <i class="fab fa-whatsapp"></i>
+                                                    </button>
+                                                    <button class="btn btn-primary btn-sm" onclick="makeCall('{{ followup.mobile }}')" title="Call">
+                                                        <i class="fas fa-phone"></i>
+                                                    </button>
+                                                    <a href="{{ url_for('edit_lead', lead_id=followup.id) }}" class="btn btn-warning btn-sm" title="Edit">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    {% if current_user.is_admin %}
+                                                    <button class="btn btn-danger btn-sm" onclick="deleteLead({{ followup.id }})" title="Delete">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Mobile Cards -->
+                        <div class="mobile-table d-block d-md-none">
+                            {% for followup in followups %}
+                            <div class="mobile-card">
+                                <div class="mobile-card-header">
+                                    <div class="mobile-card-title">{{ followup.customer_name }}</div>
+                                    <span class="badge status-badge {% if followup.status == 'Confirmed' %}bg-success{% elif followup.status == 'Did Not Pick Up' %}bg-danger{% elif followup.status == 'Completed' %}bg-info{% else %}bg-warning{% endif %}">
+                                        {{ followup.status }}
+                                    </span>
+                                </div>
+                                
+                                <div class="mobile-card-subtitle">
+                                    <i class="fas fa-phone me-1"></i>
+                                    <a href="javascript:void(0);" onclick="copyToDialer('{{ followup.mobile }}')" 
+                                       class="text-decoration-none fw-bold">{{ followup.mobile }}</a>
+                                </div>
+                                
+                                <div class="mobile-card-subtitle">
+                                    <i class="fas fa-calendar me-1"></i>Followup: {{ followup.followup_date.strftime('%d-%b-%Y') }}
+                                </div>
+                                
+                                {% if followup.car_registration %}
+                                <div class="mobile-card-subtitle">
+                                    <i class="fas fa-car me-1"></i>{{ followup.car_registration }}
+                                </div>
+                                {% endif %}
+                                
+                                {% if followup.remarks %}
+                                <div class="mobile-card-subtitle">
+                                    <i class="fas fa-comment me-1"></i>{{ followup.remarks }}
+                                </div>
+                                {% endif %}
+                                
+                                <div class="mobile-card-subtitle">
+                                    <i class="fas fa-clock me-1"></i>Created: {{ followup.created_at.strftime('%d-%b-%Y %I:%M %p') }}
+                                    {% if current_user.is_admin %}
+                                    by {{ followup.creator.name }}
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="mobile-card-actions">
+                                    <button class="btn whatsapp-btn btn-sm" onclick="showWhatsAppTemplateModal('{{ followup.mobile }}')">
+                                        <i class="fab fa-whatsapp me-1"></i>WhatsApp
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" onclick="makeCall('{{ followup.mobile }}')">
+                                        <i class="fas fa-phone me-1"></i>Call
+                                    </button>
+                                    <a href="{{ url_for('edit_lead', lead_id=followup.id) }}" class="btn btn-warning btn-sm">
+                                        <i class="fas fa-edit me-1"></i>Edit
+                                    </a>
+                                    {% if current_user.is_admin %}
+                                    <button class="btn btn-danger btn-sm" onclick="deleteLead({{ followup.id }})">
+                                        <i class="fas fa-trash me-1"></i>Delete
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- Pagination Controls -->
+                        {% if followups_pagination and followups_pagination.pages > 1 %}
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <small class="text-muted">
+                                Showing {{ followups_pagination.per_page * (followups_pagination.page - 1) + 1 }} 
+                                to {{ followups_pagination.per_page * followups_pagination.page if followups_pagination.page < followups_pagination.pages else followups_pagination.total }} 
+                                of {{ followups_pagination.total }} entries
+                            </small>
+                            <div class="btn-group btn-group-sm">
+                                {% if followups_pagination.has_prev %}
+                                    <a href="{{ url_for('followups', page=followups_pagination.prev_num, date=selected_date, user_id=selected_user_id, created_date=created_date, modified_date=modified_date, car_registration=car_registration, mobile=mobile, status=status, search=search) }}" 
+                                       class="btn btn-outline-primary">
+                                        <i class="fas fa-chevron-left"></i> Previous
+                                    </a>
+                                {% else %}
+                                    <button class="btn btn-outline-secondary" disabled>
+                                        <i class="fas fa-chevron-left"></i> Previous
+                                    </button>
+                                {% endif %}
+                                
+                                {% if followups_pagination.has_next %}
+                                    <a href="{{ url_for('followups', page=followups_pagination.next_num, date=selected_date, user_id=selected_user_id, created_date=created_date, modified_date=modified_date, car_registration=car_registration, mobile=mobile, status=status, search=search) }}" 
+                                       class="btn btn-outline-primary">
+                                        Next <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                {% else %}
+                                    <button class="btn btn-outline-secondary" disabled>
+                                        Next <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No followups found</h5>
+                            <p class="text-muted">Try adjusting your search criteria or <a href="{{ url_for('index') }}">add new leads</a>.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WhatsApp Template Selection Modal -->
+    <div class="modal fade" id="whatsappTemplateModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fab fa-whatsapp me-2 text-success"></i>Choose WhatsApp Message Template
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="whatsappMobile">
+                    <div class="mb-3">
+                        <small class="text-muted">Select a message template to send via WhatsApp:</small>
+                    </div>
+                    
+                    <!-- Template 1: Express Service -->
+                    <div class="template-option card mb-3" onclick="selectTemplate(1)">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <input type="radio" name="template" value="1" id="template1" class="form-check-input me-2">
+                                <label for="template1" class="form-check-label fw-bold">Express Service Reminder</label>
+                            </div>
+                            <div class="template-preview p-2 bg-light rounded small">
+                                Express Service:
+                                *Express 90-Minute Car Service Reminder*
+                                <br><br>
+                                Hi,<br><br>
+                                We noticed your recent inquiry about our EXPRESS 90-Min Service - perfect for busy schedules!<br><br>
+                                Package Includes:<br>
+                                ✓ Engine Oil & Filter Change<br>
+                                ✓ Air Filter Replacement<br>
+                                ✓ Coolant Top-up<br>
+                                ✓ 15-Point Safety Check<br>
+                                ✓ Professional Car Wash<br><br>
+                                Missing your call earlier? We're ready when you are!<br><br>
+                                Priority Booking Slot Reserved: +91 8448285289<br>
+                                Quick Online Booking: www.gaadimech.com/services<br><br>
+                                Limited slots available - Reply "YES" to confirm your preferred time<br><br>
+                                Aapki Gaadi, Hamari Zimmedari
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Template 2: Did not Pickup - Hindi -->
+                    <div class="template-option card mb-3" onclick="selectTemplate(2)">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <input type="radio" name="template" value="2" id="template2" class="form-check-input me-2">
+                                <label for="template2" class="form-check-label fw-bold">Did not Pickup - Hindi</label>
+                            </div>
+                            <div class="template-preview p-2 bg-light rounded small">
+                                नमस्ते!
+                                हमने आपसे कॉल पे कनेक्ट करने की कोशिश की थी! आपकी गाड़ी के लिए कुछ अमेजिंग डील्स शेयर करने थे:
+                                ✓ EXPRESS 90 MINS Car Service - Fast और Affordable
+                                ✓ FREE PICK और Drop Facility
+                                ✓ Website पर Additional Discounts
+                                सिर्फ 2 मिनट बात करके आप हजारों रुपए बचा सकते हैं!
+                                कब बात करना सुविधाजनक होगा? या फिर सीधे www.GaadiMech.com पर विजिट करें।
+                                Reply करें या कॉल बैक करें
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Template 3: Did not Pickup - English/Hinglish -->
+                    <div class="template-option card mb-3" onclick="selectTemplate(3)">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <input type="radio" name="template" value="3" id="template3" class="form-check-input me-2">
+                                <label for="template3" class="form-check-label fw-bold">Did not Pickup - English/Hinglish</label>
+                            </div>
+                            <div class="template-preview p-2 bg-light rounded small">
+                                Hi!
+                                Humne aapse call pe connect karne ki try ki thi! Aapki car ke liye kuch amazing deals share karne the:
+                                ✓ EXPRESS 90 MINS Car Service - Fast aur Affordable
+                                ✓ FREE PICK aur Drop Facility
+                                ✓ Website pe Additional Discounts bhi milenge
+                                Bas 2 minute ki baat hai, but savings thousands mein hogi!
+                                When would be a good time to talk? Ya phir check out www.GaadiMech.com
+                                Reply Karein ya call back Karein
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Template 4: Type my Own -->
+                    <div class="template-option card mb-3" onclick="selectTemplate(4)">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <input type="radio" name="template" value="4" id="template4" class="form-check-input me-2">
+                                <label for="template4" class="form-check-label fw-bold">Type my Own</label>
+                            </div>
+                            <div class="template-preview p-2 bg-light rounded small">
+                                <em class="text-muted">No pre-filled message - you can type your own custom message in WhatsApp</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="sendWhatsAppBtn" onclick="sendSelectedTemplate()" disabled>
+                        <i class="fab fa-whatsapp me-1"></i>Send on WhatsApp
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // WhatsApp Template Functions
+        let selectedTemplateId = null;
+        let whatsappTemplates = {
+            1: `Express Service:
+*Express 90-Minute Car Service Reminder*
+
+Hi,
+
+We noticed your recent inquiry about our EXPRESS 90-Min Service - perfect for busy schedules!
+
+Package Includes:
+✓ Engine Oil & Filter Change
+✓ Air Filter Replacement
+✓ Coolant Top-up
+✓ 15-Point Safety Check
+✓ Professional Car Wash
+
+Missing your call earlier? We're ready when you are!
+
+Priority Booking Slot Reserved: +91 8448285289
+Quick Online Booking: www.gaadimech.com/services
+
+Limited slots available - Reply "YES" to confirm your preferred time
+
+Aapki Gaadi, Hamari Zimmedari`,
+            2: `नमस्ते!
+
+हमने आपसे कॉल पे कनेक्ट करने की कोशिश की थी! आपकी गाड़ी के लिए कुछ अमेजिंग डील्स शेयर करने थे:
+
+✓ EXPRESS 90 MINS Car Service - Fast और Affordable
+✓ FREE PICK और Drop Facility
+✓ Website पर Additional Discounts
+
+सिर्फ 2 मिनट बात करके आप हजारों रुपए बचा सकते हैं!
+
+कब बात करना सुविधाजनक होगा? या फिर सीधे www.GaadiMech.com पर विजिट करें।
+
+Reply करें या कॉल बैक करें`,
+            3: `Hi!
+
+Humne aapse call pe connect karne ki try ki thi! Aapki car ke liye kuch amazing deals share karne the:
+
+✓ EXPRESS 90 MINS Car Service - Fast aur Affordable
+✓ FREE PICK aur Drop Facility
+✓ Website pe Additional Discounts bhi milenge
+
+Bas 2 minute ki baat hai, but savings thousands mein hogi!
+
+When would be a good time to talk? Ya phir check out www.GaadiMech.com
+
+Reply Karein ya call back Karein`,
+            4: ``
+        };
+
+        function showWhatsAppTemplateModal(mobile) {
+            document.getElementById('whatsappMobile').value = mobile;
+            selectedTemplateId = null;
+            document.getElementById('sendWhatsAppBtn').disabled = true;
+            
+            // Reset radio buttons
+            document.querySelectorAll('input[name="template"]').forEach(radio => {
+                radio.checked = false;
+            });
+            
+            // Reset card selections
+            document.querySelectorAll('.template-option').forEach(card => {
+                card.classList.remove('border-success', 'bg-success', 'bg-opacity-10', 'selected');
+            });
+            
+            new bootstrap.Modal(document.getElementById('whatsappTemplateModal')).show();
+        }
+
+        function selectTemplate(templateId) {
+            selectedTemplateId = templateId;
+            
+            // Update radio button
+            document.getElementById(`template${templateId}`).checked = true;
+            
+            // Update card styling
+            document.querySelectorAll('.template-option').forEach(card => {
+                card.classList.remove('border-success', 'bg-success', 'bg-opacity-10', 'selected');
+            });
+            
+            // Find and select the clicked template card
+            const selectedCard = document.querySelector(`#template${templateId}`).closest('.template-option');
+            selectedCard.classList.add('border-success', 'bg-success', 'bg-opacity-10', 'selected');
+            
+            // Enable send button
+            document.getElementById('sendWhatsAppBtn').disabled = false;
+        }
+
+        function sendSelectedTemplate() {
+            if (!selectedTemplateId) {
+                showToast('Please select a template first', 'error');
+                return;
+            }
+            
+            const mobile = document.getElementById('whatsappMobile').value;
+            
+            // Clean mobile number for WhatsApp
+            let cleanMobile = mobile.replace(/\D/g, '');
+            if (cleanMobile.length === 10) {
+                cleanMobile = '91' + cleanMobile;
+            }
+            
+            // Create WhatsApp URL - if template 4 (Type my Own), don't include message text
+            let whatsappUrl;
+            if (selectedTemplateId === 4) {
+                whatsappUrl = `https://wa.me/${cleanMobile}`;
+            } else {
+                const message = whatsappTemplates[selectedTemplateId];
+                whatsappUrl = `https://wa.me/${cleanMobile}?text=${encodeURIComponent(message)}`;
+            }
+            
+            // Close modal and open WhatsApp
+            bootstrap.Modal.getInstance(document.getElementById('whatsappTemplateModal')).hide();
+            window.open(whatsappUrl, '_blank');
+            
+            if (selectedTemplateId === 4) {
+                showToast('Opening WhatsApp - type your own message', 'success');
+            } else {
+                showToast('Opening WhatsApp with selected template', 'success');
+            }
+        }
+
+        // Mobile-optimized functions
+        function openWhatsApp(mobile) {
+            if (!mobile) {
+                showToast('Mobile number not available', 'error');
+                return;
+            }
+            
+            fetch('/open_whatsapp/' + mobile)
+                .then(response => response.json())
+                .then(data => {
+                    window.open(data.url, '_blank');
+                })
+                .catch(error => {
+                    showToast('Error opening WhatsApp', 'error');
+                });
+        }
+
+        function makeCall(mobile) {
+            if (mobile) {
+                if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                    window.open('tel:' + mobile, '_self');
+                } else {
+                    copyToDialer(mobile);
+                }
+            }
+        }
+
+        function copyToDialer(mobile) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(mobile).then(() => {
+                    showToast('Phone number copied to clipboard', 'success');
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement("textarea");
+                textArea.value = mobile;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('Phone number copied to clipboard', 'success');
+                } catch (err) {
+                    showToast('Failed to copy phone number', 'error');
+                }
+                document.body.removeChild(textArea);
+            }
+        }
+
+        function deleteLead(leadId) {
+            if (confirm('Are you sure you want to delete this lead? This action cannot be undone.')) {
+                fetch('/delete_lead/' + leadId, { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('Lead deleted successfully', 'success');
+                            setTimeout(() => location.reload(), 1000);
+                        } else {
+                            showToast('Error deleting lead: ' + (data.message || 'Unknown error'), 'error');
+                        }
+                    })
+                    .catch(error => {
+                        showToast('Network error occurred', 'error');
+                    });
+            }
+        }
+
+        // Mobile-friendly toast notifications
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+            toast.style.top = '20px';
+            toast.style.right = '20px';
+            toast.style.zIndex = '9999';
+            toast.style.minWidth = '300px';
+            toast.style.maxWidth = '90vw';
+            toast.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.remove();
+                }
+            }, 5000);
+        }
+
+        // Auto-collapse navbar on mobile after clicking
+        const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
+        const navCollapse = document.querySelector('.navbar-collapse');
+        
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth < 992) {
+                    const bsCollapse = new bootstrap.Collapse(navCollapse);
+                    bsCollapse.hide();
+                }
+            });
+        });
+
+        // Mobile number formatting
+        const mobileInput = document.getElementById('mobile');
+        if (mobileInput) {
+            mobileInput.addEventListener('input', function(e) {
+                this.value = this.value.replace(/\D/g, '');
+                if (this.value.length > 12) {
+                    this.value = this.value.slice(0, 12);
+                }
+            });
+        }
+
+        // Car registration formatting
+        const carRegInput = document.getElementById('car_registration');
+        if (carRegInput) {
+            carRegInput.addEventListener('input', function(e) {
+                this.value = this.value.toUpperCase();
+            });
+        }
+
+        // Prevent zoom on double-tap for iOS
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function (event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+    </script>
+</body>
+</html>

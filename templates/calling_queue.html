@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calling Queue - GaadiMech CRM</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+        }
+        
+        .queue-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        
+        .current-lead-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        
+        .lead-info {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+        }
+        
+        .lead-info strong {
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .priority-badge {
+            font-size: 0.9rem;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .priority-high {
+            background: #ff4757;
+            color: white;
+        }
+        
+        .priority-medium {
+            background: #ffa502;
+            color: white;
+        }
+        
+        .priority-low {
+            background: #2ed573;
+            color: white;
+        }
+        
+        .action-buttons {
+            margin-top: 20px;
+        }
+        
+        .btn-next {
+            background: #2ed573;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            border-radius: 10px;
+            color: white;
+            transition: all 0.3s;
+        }
+        
+        .btn-next:hover {
+            background: #26de81;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(46, 213, 115, 0.4);
+        }
+        
+        .btn-skip {
+            background: #ff6348;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 10px;
+            color: white;
+            transition: all 0.3s;
+        }
+        
+        .btn-skip:hover {
+            background: #ff7979;
+            transform: translateY(-2px);
+        }
+        
+        .queue-count {
+            background: rgba(255,255,255,0.2);
+            padding: 10px 20px;
+            border-radius: 10px;
+            display: inline-block;
+            font-size: 1.1rem;
+        }
+        
+        .no-leads {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+        }
+        
+        .call-button {
+            background: #10ac84;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            color: white;
+            transition: all 0.3s;
+        }
+        
+        .call-button:hover {
+            background: #0fb876;
+            transform: translateY(-2px);
+        }
+        
+        .whatsapp-button {
+            background: #25D366;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            color: white;
+            transition: all 0.3s;
+        }
+        
+        .whatsapp-button:hover {
+            background: #20ba5a;
+            transform: translateY(-2px);
+        }
+        
+        .quick-log-btn {
+            background: #5f27cd;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            color: white;
+            transition: all 0.3s;
+        }
+        
+        .quick-log-btn:hover {
+            background: #341f97;
+            transform: translateY(-2px);
+        }
+        
+        .keyboard-hints {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .keyboard-hints kbd {
+            background: rgba(255,255,255,0.3);
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="text-white"><i class="fas fa-phone-alt"></i> Calling Queue</h1>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-light"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+        </div>
+        
+        <div class="current-lead-card" id="current-lead-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2><i class="fas fa-user-circle"></i> Current Lead</h2>
+                <span class="queue-count" id="queue-count">Loading...</span>
+            </div>
+            
+            <div id="lead-details">
+                <div class="loading">
+                    <div class="spinner-border text-light" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3">Loading calling queue...</p>
+                </div>
+            </div>
+            
+            <div class="keyboard-hints">
+                <strong>Keyboard Shortcuts:</strong>
+                <kbd>N</kbd> Next Lead &nbsp;
+                <kbd>S</kbd> Skip &nbsp;
+                <kbd>Q</kbd> Quick Log &nbsp;
+                <kbd>C</kbd> Call &nbsp;
+                <kbd>W</kbd> WhatsApp
+            </div>
+        </div>
+        
+        <div class="queue-card">
+            <h3><i class="fas fa-list"></i> Upcoming Leads</h3>
+            <div id="upcoming-leads">
+                <p class="text-muted">Loading...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Log Modal -->
+    <div class="modal fade" id="quickLogModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-bolt"></i> Quick Log</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Status</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="quick-status" id="status-answered" value="Confirmed" autocomplete="off">
+                            <label class="btn btn-outline-success" for="status-answered">Answered</label>
+                            
+                            <input type="radio" class="btn-check" name="quick-status" id="status-no-answer" value="Did Not Pick Up" autocomplete="off" checked>
+                            <label class="btn btn-outline-warning" for="status-no-answer">No Answer</label>
+                            
+                            <input type="radio" class="btn-check" name="quick-status" id="status-callback" value="Needs Followup" autocomplete="off">
+                            <label class="btn btn-outline-info" for="status-callback">Callback</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Follow-up Date</label>
+                        <input type="date" class="form-control" id="quick-followup-date">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Quick Remarks (optional)</label>
+                        <textarea class="form-control" id="quick-remarks" rows="3" placeholder="Type or use voice input..."></textarea>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="voice-input-btn">
+                            <i class="fas fa-microphone"></i> Voice Input
+                        </button>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Or use a template:</label>
+                        <select class="form-select" id="template-select">
+                            <option value="">-- Select Template --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel (Esc)</button>
+                    <button type="button" class="btn btn-primary" id="save-quick-log">Save & Next (Alt+S)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentQueue = [];
+        let currentIndex = 0;
+        let currentLead = null;
+        let quickLogModal = null;
+        let templates = [];
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            quickLogModal = new bootstrap.Modal(document.getElementById('quickLogModal'));
+            loadQueue();
+            loadTemplates();
+            setupKeyboardShortcuts();
+            setupVoiceInput();
+        });
+        
+        async function loadQueue() {
+            try {
+                const response = await fetch('/api/calling-queue');
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentQueue = data.queue;
+                    currentIndex = 0;
+                    displayCurrentLead();
+                    displayUpcomingLeads();
+                } else {
+                    showError('Error loading queue');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Network error');
+            }
+        }
+        
+        async function loadTemplates() {
+            try {
+                const response = await fetch('/api/templates');
+                const data = await response.json();
+                
+                if (data.success) {
+                    templates = data.templates;
+                    populateTemplateDropdown();
+                }
+            } catch (error) {
+                console.error('Error loading templates:', error);
+            }
+        }
+        
+        function populateTemplateDropdown() {
+            const select = document.getElementById('template-select');
+            templates.forEach(template => {
+                const option = document.createElement('option');
+                option.value = template.id;
+                option.textContent = template.title;
+                select.appendChild(option);
+            });
+            
+            select.addEventListener('change', function() {
+                if (this.value) {
+                    const template = templates.find(t => t.id == this.value);
+                    if (template) {
+                        document.getElementById('quick-remarks').value = template.content;
+                    }
+                }
+            });
+        }
+        
+        function displayCurrentLead() {
+            const detailsDiv = document.getElementById('lead-details');
+            const countSpan = document.getElementById('queue-count');
+            
+            countSpan.textContent = `${currentIndex + 1} of ${currentQueue.length}`;
+            
+            if (currentIndex >= currentQueue.length) {
+                detailsDiv.innerHTML = `
+                    <div class="no-leads">
+                        <h3><i class="fas fa-check-circle" style="font-size: 3rem;"></i></h3>
+                        <h3>All Done!</h3>
+                        <p>You've completed all leads in your queue.</p>
+                        <button class="btn btn-light mt-3" onclick="loadQueue()">
+                            <i class="fas fa-redo"></i> Refresh Queue
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            currentLead = currentQueue[currentIndex];
+            
+            detailsDiv.innerHTML = `
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="lead-info">
+                            <strong>Name:</strong> ${currentLead.customer_name || 'N/A'}
+                        </div>
+                        <div class="lead-info">
+                            <strong>Mobile:</strong> 
+                            <a href="tel:${currentLead.mobile}" class="text-white text-decoration-none">
+                                <i class="fas fa-phone"></i> ${currentLead.mobile}
+                            </a>
+                        </div>
+                        <div class="lead-info">
+                            <strong>Car:</strong> ${currentLead.car_registration || 'Not specified'}
+                        </div>
+                        <div class="lead-info">
+                            <strong>Status:</strong> <span class="badge bg-light text-dark">${currentLead.status}</span>
+                        </div>
+                        <div class="lead-info">
+                            <strong>Priority:</strong> 
+                            <span class="priority-badge priority-${currentLead.priority.toLowerCase()}">${currentLead.priority}</span>
+                            <small>(Score: ${currentLead.score})</small>
+                        </div>
+                        ${currentLead.remarks ? `
+                        <div class="lead-info">
+                            <strong>Remarks:</strong><br>
+                            <small style="background: rgba(255,255,255,0.2); padding: 10px; border-radius: 5px; display: block; margin-top: 5px;">
+                                ${currentLead.remarks}
+                            </small>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <button class="call-button w-100 mb-2" onclick="makeCall()" style="background: #28a745;">
+                            <i class="fas fa-phone"></i> Direct Call
+                        </button>
+                        <button class="whatsapp-button w-100 mb-2" onclick="openWhatsApp()">
+                            <i class="fab fa-whatsapp"></i> WhatsApp
+                        </button>
+                        <button class="quick-log-btn w-100 mb-2" onclick="showQuickLog()">
+                            <i class="fas fa-bolt"></i> Quick Log
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="action-buttons text-center mt-4">
+                    <button class="btn-next me-3" onclick="nextLead()">
+                        <i class="fas fa-arrow-right"></i> Next Lead
+                    </button>
+                    <button class="btn-skip" onclick="skipLead()">
+                        <i class="fas fa-forward"></i> Skip
+                    </button>
+                </div>
+            `;
+        }
+        
+        function displayUpcomingLeads() {
+            const upcomingDiv = document.getElementById('upcoming-leads');
+            
+            if (currentIndex + 1 >= currentQueue.length) {
+                upcomingDiv.innerHTML = '<p class="text-muted">No more leads in queue</p>';
+                return;
+            }
+            
+            const upcoming = currentQueue.slice(currentIndex + 1, currentIndex + 6);
+            
+            upcomingDiv.innerHTML = upcoming.map((lead, index) => `
+                <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                    <div>
+                        <strong>${lead.customer_name}</strong>
+                        <span class="text-muted ms-2">${lead.mobile}</span>
+                    </div>
+                    <span class="priority-badge priority-${lead.priority.toLowerCase()}">${lead.priority}</span>
+                </div>
+            `).join('');
+        }
+        
+        function nextLead() {
+            currentIndex++;
+            displayCurrentLead();
+            displayUpcomingLeads();
+        }
+        
+        function skipLead() {
+            if (confirm('Skip this lead? It will go to the end of the queue.')) {
+                currentQueue.push(currentQueue.splice(currentIndex, 1)[0]);
+                displayCurrentLead();
+                displayUpcomingLeads();
+            }
+        }
+        
+        function makeCall() {
+            if (currentLead) {
+                window.location.href = `tel:${currentLead.mobile}`;
+                // Open quick log after a short delay
+                setTimeout(() => showQuickLog(), 1000);
+            }
+        }
+        
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 150);
+            }, 5000);
+        }
+        
+        function openWhatsApp() {
+            if (currentLead) {
+                const mobile = currentLead.mobile.replace(/[^\d]/g, '');
+                const url = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                    ? `whatsapp://send?phone=91${mobile}`
+                    : `https://web.whatsapp.com/send?phone=91${mobile}`;
+                window.open(url, '_blank');
+            }
+        }
+        
+        function showQuickLog() {
+            // Set tomorrow as default followup date
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('quick-followup-date').value = tomorrow.toISOString().split('T')[0];
+            
+            quickLogModal.show();
+        }
+        
+        document.getElementById('save-quick-log').addEventListener('click', async function() {
+            if (!currentLead) return;
+            
+            const status = document.querySelector('input[name="quick-status"]:checked').value;
+            const followupDate = document.getElementById('quick-followup-date').value;
+            const remarks = document.getElementById('quick-remarks').value;
+            
+            try {
+                const response = await fetch(`/api/quick-log/${currentLead.id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        status: status,
+                        followup_date: followupDate,
+                        remarks: remarks
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    quickLogModal.hide();
+                    // Clear form
+                    document.getElementById('quick-remarks').value = '';
+                    document.getElementById('template-select').value = '';
+                    // Go to next lead
+                    nextLead();
+                } else {
+                    alert('Error saving: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Network error');
+            }
+        });
+        
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                // Ignore if typing in input/textarea
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                
+                switch(e.key.toLowerCase()) {
+                    case 'n':
+                        nextLead();
+                        break;
+                    case 's':
+                        skipLead();
+                        break;
+                    case 'q':
+                        showQuickLog();
+                        break;
+                    case 'c':
+                        makeCall();
+                        break;
+                    case 'w':
+                        openWhatsApp();
+                        break;
+                }
+            });
+            
+            // Alt+S to save in modal
+            document.addEventListener('keydown', function(e) {
+                if (e.altKey && e.key === 's') {
+                    e.preventDefault();
+                    document.getElementById('save-quick-log').click();
+                }
+            });
+        }
+        
+        function setupVoiceInput() {
+            const voiceBtn = document.getElementById('voice-input-btn');
+            const remarksTextarea = document.getElementById('quick-remarks');
+            
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                const recognition = new SpeechRecognition();
+                
+                recognition.continuous = false;
+                recognition.lang = 'en-IN';  // English-India for code-switching
+                recognition.interimResults = false;
+                
+                voiceBtn.addEventListener('click', function() {
+                    recognition.start();
+                    voiceBtn.innerHTML = '<i class="fas fa-microphone"></i> Listening...';
+                    voiceBtn.disabled = true;
+                });
+                
+                recognition.onresult = function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    remarksTextarea.value += (remarksTextarea.value ? ' ' : '') + transcript;
+                };
+                
+                recognition.onend = function() {
+                    voiceBtn.innerHTML = '<i class="fas fa-microphone"></i> Voice Input';
+                    voiceBtn.disabled = false;
+                };
+                
+                recognition.onerror = function(event) {
+                    console.error('Speech recognition error:', event.error);
+                    voiceBtn.innerHTML = '<i class="fas fa-microphone"></i> Voice Input';
+                    voiceBtn.disabled = false;
+                };
+            } else {
+                voiceBtn.style.display = 'none';
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('lead-details').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> ${message}
+                    <button class="btn btn-sm btn-outline-danger ms-3" onclick="loadQueue()">Retry</button>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

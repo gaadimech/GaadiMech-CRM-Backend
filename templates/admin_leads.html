@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>GaadiMech CRM Portal - Admin Leads</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        /* Header with brand */
+        .brand-header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: none;
+            padding: 15px 0;
+            margin-bottom: 0;
+        }
+        
+        .brand-header .navbar-brand {
+            color: white;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-decoration: none;
+        }
+        
+        .brand-header .navbar-brand:hover {
+            color: #f8f9fa;
+        }
+        
+        .user-info {
+            color: white;
+            margin-right: 15px;
+        }
+        
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 25px;
+            padding: 8px 20px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            transform: translateY(-1px);
+        }
+        
+        /* Navigation Tabs */
+        .nav-tabs-container {
+            background: white;
+            margin: 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .nav-tabs {
+            border-bottom: none;
+            padding: 0 20px;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: #666;
+            font-weight: 600;
+            padding: 20px 30px;
+            border-radius: 0;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: #667eea;
+            background: transparent;
+            border: none;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: #667eea;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .nav-tabs .nav-link i {
+            margin-right: 8px;
+        }
+        
+        /* Main content area */
+        .content-container {
+            background: white;
+            margin: 0;
+            min-height: calc(100vh - 150px);
+            padding: 30px;
+        }
+        
+        /* Form card styling */
+        .main-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+            background: white;
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 25px;
+        }
+        
+        .card-header h5 {
+            margin: 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            font-size: 1.3rem;
+        }
+        
+        .card-body {
+            padding: 30px;
+            background: white;
+        }
+        
+        /* Form styling */
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .form-label i {
+            margin-right: 8px;
+            width: 16px;
+            color: #667eea;
+        }
+        
+        .form-control, .form-select {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 12px 15px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            margin-bottom: 15px;
+            background: white;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            background: white;
+        }
+        
+        .form-text {
+            color: #6c757d;
+            font-size: 0.85rem;
+            margin-top: -10px;
+            margin-bottom: 15px;
+        }
+        
+        textarea.form-control {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        /* Button styling */
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            color: white !important;
+            text-decoration: none;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            color: white !important;
+        }
+        
+        .btn-primary i {
+            margin-right: 8px;
+        }
+        
+        /* Recent leads table */
+        .table {
+            margin-top: 20px;
+        }
+        
+        .table th {
+            background: #f8f9fa;
+            border: none;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .table td {
+            border: none;
+            border-bottom: 1px solid #e9ecef;
+            vertical-align: middle;
+        }
+        
+        .badge {
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .alert {
+            border-radius: 10px;
+            border: none;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .required {
+            color: #e74c3c;
+        }
+        
+        /* Pagination styling */
+        .btn-group-sm .btn {
+            font-size: 0.8rem;
+            padding: 0.25rem 0.75rem;
+        }
+        
+        /* Team summary table styling */
+        .table-sm th, .table-sm td {
+            padding: 0.5rem;
+            vertical-align: middle;
+        }
+        
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(0,0,0,.02);
+        }
+        
+        /* Badge adjustments for better readability */
+        .badge {
+            font-size: 0.7rem;
+            padding: 0.4rem 0.6rem;
+        }
+        
+        /* Recent leads table responsiveness */
+        .table-responsive {
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <nav class="navbar brand-header">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-car"></i>
+                GaadiMech CRM Portal
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="user-info">Welcome, {{ current_user.name }}</span>
+                <a href="{{ url_for('logout') }}" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs-container">
+        <ul class="nav nav-tabs">
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('index') }}">
+                    <i class="fas fa-plus"></i>
+                    Add Lead
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('dashboard') }}">
+                    <i class="fas fa-tachometer-alt"></i>
+                    Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('followups') }}">
+                    <i class="fas fa-calendar-check"></i>
+                    View Followups
+                </a>
+            </li>
+            {% if current_user.is_admin %}
+            <li class="nav-item">
+                <a class="nav-link active" href="{{ url_for('admin_leads') }}">
+                    <i class="fas fa-users-cog"></i>
+                    Admin Leads
+                </a>
+            </li>
+            {% else %}
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('team_leads') }}">
+                    <i class="fas fa-tasks"></i>
+                    Today's Leads
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content-container">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- AI Text Parser -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card" style="border: 2px dashed #667eea;">
+                    <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                        <h5 class="mb-0">
+                            <i class="fas fa-robot"></i>
+                            AI Text Parser - Extract Customer Information
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label for="raw_text" class="form-label">
+                                        <i class="fas fa-paste"></i>
+                                        Copy-paste your message here
+                                    </label>
+                                    <textarea class="form-control" id="raw_text" rows="6" 
+                                              placeholder="Paste your message here..."></textarea>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-grid h-100">
+                                    <button type="button" class="btn btn-info btn-lg" id="parse_btn">
+                                        <i class="fas fa-magic"></i>
+                                        Parse Text
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="parse_result" class="mt-3" style="display: none;">
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle"></i>
+                                <strong>Parsed Successfully!</strong> The information has been populated in the form below.
+                            </div>
+                        </div>
+                        <div id="parse_error" class="mt-3" style="display: none;">
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <strong>Error:</strong> <span id="error_message"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Lead Form -->
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card main-card">
+                    <div class="card-header">
+                        <h5>
+                            <i class="fas fa-plus-circle"></i>
+                            Add New Lead & Assign to Team
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="{{ url_for('admin_leads') }}">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="mobile" class="form-label">
+                                            <i class="fas fa-phone"></i>
+                                            Mobile Number <span class="required">*</span>
+                                        </label>
+                                        <input type="text" class="form-control" id="mobile" name="mobile" required 
+                                               placeholder="Enter mobile number" maxlength="12">
+                                        <div class="form-text">Enter 10 or 12 digit mobile number (no + required)</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="assign_to" class="form-label">
+                                            <i class="fas fa-user-plus"></i>
+                                            Assign to Team Member <span class="required">*</span>
+                                        </label>
+                                        <select class="form-select" id="assign_to" name="assign_to" required>
+                                            <option value="">Select team member</option>
+                                            {% for member in team_members %}
+                                                <option value="{{ member.id }}">{{ member.name }} ({{ member.username }})</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="form-text">Required: Select a team member to assign this lead</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="customer_name" class="form-label">
+                                            <i class="fas fa-user"></i>
+                                            Customer Name
+                                        </label>
+                                        <input type="text" class="form-control" id="customer_name" name="customer_name" 
+                                               placeholder="Enter customer name" maxlength="100">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <!-- Empty column for spacing -->
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="car_manufacturer" class="form-label">
+                                            <i class="fas fa-car"></i>
+                                            Car Manufacturer
+                                        </label>
+                                        <input type="text" class="form-control" id="car_manufacturer" name="car_manufacturer" 
+                                               placeholder="e.g., Maruti, Hyundai, Honda" maxlength="50">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="car_model" class="form-label">
+                                            <i class="fas fa-cog"></i>
+                                            Car Model
+                                        </label>
+                                        <input type="text" class="form-control" id="car_model" name="car_model" 
+                                               placeholder="e.g., Swift, i20, City" maxlength="50">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="pickup_type" class="form-label">
+                                            <i class="fas fa-truck"></i>
+                                            Pickup Type
+                                        </label>
+                                        <select class="form-select" id="pickup_type" name="pickup_type">
+                                            <option value="">Select pickup type</option>
+                                            <option value="Pickup">Pickup</option>
+                                            <option value="Self Walkin">Self Walkin</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="service_type" class="form-label">
+                                            <i class="fas fa-wrench"></i>
+                                            Service Type
+                                        </label>
+                                        <select class="form-select" id="service_type" name="service_type">
+                                            <option value="">Select service type</option>
+                                            <option value="Express Car Service">Express Car Service</option>
+                                            <option value="Dent Paint">Dent Paint</option>
+                                            <option value="AC Service">AC Service</option>
+                                            <option value="Car Wash">Car Wash</option>
+                                            <option value="Repairs">Repairs</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="scheduled_date" class="form-label">
+                                            <i class="fas fa-calendar"></i>
+                                            Scheduled Date
+                                        </label>
+                                        <input type="date" class="form-control" id="scheduled_date" name="scheduled_date">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="source" class="form-label">
+                                            <i class="fas fa-globe"></i>
+                                            Source
+                                        </label>
+                                        <select class="form-select" id="source" name="source">
+                                            <option value="">Select source</option>
+                                            <option value="WhatsApp">WhatsApp</option>
+                                            <option value="Chatbot">Chatbot</option>
+                                            <option value="Website" selected>Website</option>
+                                            <option value="Social Media">Social Media</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label for="remarks" class="form-label">
+                                            <i class="fas fa-sticky-note"></i>
+                                            Remarks
+                                        </label>
+                                        <textarea class="form-control" id="remarks" name="remarks" rows="3" 
+                                                  placeholder="Add any additional notes or remarks"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i>
+                                    Add Lead
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Leads -->
+            <div class="col-lg-4">
+                <div class="card main-card">
+                    <div class="card-header">
+                        <h5>
+                            <i class="fas fa-history"></i>
+                            Recent Leads
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Filters -->
+                        <div class="mb-3">
+                            <form method="GET" action="{{ url_for('admin_leads') }}" class="d-flex flex-column gap-2">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <input type="date" class="form-control form-control-sm" name="created_date" 
+                                               value="{{ request.args.get('created_date', today_date) }}" 
+                                               placeholder="Created Date">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="text" class="form-control form-control-sm" name="search" 
+                                               value="{{ request.args.get('search', '') }}" 
+                                               placeholder="Search name/car">
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <button type="submit" class="btn btn-sm btn-primary w-100">
+                                            <i class="fas fa-filter"></i> Filter
+                                        </button>
+                                    </div>
+                                    <div class="col-6">
+                                        <a href="{{ url_for('admin_leads') }}" class="btn btn-sm btn-secondary w-100">
+                                            <i class="fas fa-times"></i> Clear
+                                        </a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        {% if recent_leads %}
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Mobile</th>
+                                            <th>Name</th>
+                                            <th>Service</th>
+                                            <th>Team Member</th>
+                                            <th>Added?</th>
+                                            <th>Date</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for lead in recent_leads %}
+                                        <tr>
+                                            <td>{{ lead.mobile }}</td>
+                                            <td>{{ lead.customer_name or 'N/A' }}</td>
+                                            <td>
+                                                {% if lead.service_type %}
+                                                    <span class="badge bg-primary">{{ lead.service_type }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">N/A</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% for assignment in lead.assignments %}
+                                                    {% if assignment.assigned_to %}
+                                                        <span class="badge bg-info">{{ assignment.assigned_to.name }}</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="badge bg-warning">Unassigned</span>
+                                                {% endfor %}
+                                            </td>
+                                            {% set added = false %}
+                                            {% for assignment in lead.assignments %}
+                                                {% if assignment.added_to_crm %}
+                                                    {% set added = true %}
+                                                {% endif %}
+                                            {% endfor %}
+                                            <td>
+                                                {% if added %}
+                                                    <span class="badge bg-success">Added to CRM</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">Pending</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ lead.created_at.strftime('%m/%d') }}</td>
+                                            <td>
+                                                <a href="{{ url_for('edit_unassigned_lead', lead_id=lead.id) }}" 
+                                                   class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Pagination Controls -->
+                            {% if recent_leads_pagination.pages > 1 %}
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <small class="text-muted">
+                                    Showing {{ recent_leads_pagination.per_page * (recent_leads_pagination.page - 1) + 1 }} 
+                                    to {{ recent_leads_pagination.per_page * recent_leads_pagination.page if recent_leads_pagination.page < recent_leads_pagination.pages else recent_leads_pagination.total }} 
+                                    of {{ recent_leads_pagination.total }} entries
+                                </small>
+                                <div class="btn-group btn-group-sm">
+                                    {% if recent_leads_pagination.has_prev %}
+                                        <a href="{{ url_for('admin_leads', page=recent_leads_pagination.prev_num, created_date=request.args.get('created_date'), search=request.args.get('search')) }}" 
+                                           class="btn btn-outline-primary">
+                                            <i class="fas fa-chevron-left"></i> Previous
+                                        </a>
+                                    {% else %}
+                                        <button class="btn btn-outline-secondary" disabled>
+                                            <i class="fas fa-chevron-left"></i> Previous
+                                        </button>
+                                    {% endif %}
+                                    
+                                    {% if recent_leads_pagination.has_next %}
+                                        <a href="{{ url_for('admin_leads', page=recent_leads_pagination.next_num, created_date=request.args.get('created_date'), search=request.args.get('search')) }}" 
+                                           class="btn btn-outline-primary">
+                                            Next <i class="fas fa-chevron-right"></i>
+                                        </a>
+                                    {% else %}
+                                        <button class="btn btn-outline-secondary" disabled>
+                                            Next <i class="fas fa-chevron-right"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% else %}
+                            <p class="text-muted">No recent leads found.</p>
+                        {% endif %}
+                        
+                        <!-- Team Summary Table -->
+                        <div class="mt-4">
+                            <h6 class="mb-3">
+                                <i class="fas fa-users"></i>
+                                Team Assignment Summary
+                                <small class="text-muted">({{ request.args.get('created_date', today_date) }})</small>
+                            </h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Team Member</th>
+                                            <th>Assigned Leads</th>
+                                            <th>Added to CRM</th>
+                                            <th>Completion Rate</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for summary in team_summary %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ summary.member.name }}</strong>
+                                                <small class="text-muted d-block">{{ summary.member.username }}</small>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-primary">{{ summary.assigned_count }}</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-success">{{ summary.crm_count }}</span>
+                                            </td>
+                                            <td>
+                                                {% if summary.assigned_count > 0 %}
+                                                    {% set completion_rate = (summary.crm_count / summary.assigned_count * 100) | round(1) %}
+                                                    <span class="badge bg-{{ 'success' if completion_rate >= 80 else 'warning' if completion_rate >= 50 else 'danger' }}">
+                                                        {{ completion_rate }}%
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">N/A</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Text Parser JavaScript -->
+    <script>
+        document.getElementById('parse_btn').addEventListener('click', function() {
+            const rawText = document.getElementById('raw_text').value.trim();
+            const parseBtn = document.getElementById('parse_btn');
+            const parseResult = document.getElementById('parse_result');
+            const parseError = document.getElementById('parse_error');
+            
+            // Hide previous results
+            parseResult.style.display = 'none';
+            parseError.style.display = 'none';
+            
+            if (!rawText) {
+                parseError.style.display = 'block';
+                document.getElementById('error_message').textContent = 'Please enter some text to parse.';
+                return;
+            }
+            
+            // Show loading state
+            parseBtn.disabled = true;
+            parseBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Parsing...';
+            
+            // Make API call to parse text
+            fetch('/api/parse-customer-text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: rawText })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Populate form fields with parsed data
+                    populateForm(data.data);
+                    parseResult.style.display = 'block';
+                    
+                    // Scroll to form
+                    document.querySelector('.main-card').scrollIntoView({ 
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                } else {
+                    parseError.style.display = 'block';
+                    document.getElementById('error_message').textContent = data.message || 'Failed to parse text';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                parseError.style.display = 'block';
+                document.getElementById('error_message').textContent = 'An error occurred while parsing the text.';
+            })
+            .finally(() => {
+                // Reset button state
+                parseBtn.disabled = false;
+                parseBtn.innerHTML = '<i class="fas fa-magic"></i> Parse Text';
+            });
+        });
+        
+        function populateForm(data) {
+            // Populate form fields with parsed data
+            if (data.mobile) {
+                document.getElementById('mobile').value = data.mobile;
+            }
+            if (data.customer_name) {
+                document.getElementById('customer_name').value = data.customer_name;
+            }
+            if (data.car_manufacturer) {
+                document.getElementById('car_manufacturer').value = data.car_manufacturer;
+            }
+            if (data.car_model) {
+                document.getElementById('car_model').value = data.car_model;
+            }
+            if (data.pickup_type) {
+                document.getElementById('pickup_type').value = data.pickup_type;
+            }
+            if (data.service_type) {
+                document.getElementById('service_type').value = data.service_type;
+            }
+            if (data.scheduled_date) {
+                document.getElementById('scheduled_date').value = data.scheduled_date;
+            }
+            if (data.source) {
+                document.getElementById('source').value = data.source;
+            }
+            if (data.remarks) {
+                document.getElementById('remarks').value = data.remarks;
+            }
+            
+            // Add visual feedback for populated fields
+            const formFields = ['mobile', 'customer_name', 'car_manufacturer', 'car_model', 
+                              'pickup_type', 'service_type', 'scheduled_date', 'source', 'remarks'];
+            
+            formFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field && field.value) {
+                    field.classList.add('border-success');
+                    field.style.backgroundColor = '#f8fff8';
+                    
+                    // Remove highlight after 3 seconds
+                    setTimeout(() => {
+                        field.classList.remove('border-success');
+                        field.style.backgroundColor = '';
+                    }, 3000);
+                }
+            });
+        }
+        
+        // Sample buttons removed as per user request
+        
+        // Form validation for mandatory fields
+        const adminForm = document.querySelector('form[action="{{ url_for("admin_leads") }}"]');
+        if (adminForm) {
+            adminForm.addEventListener('submit', function(e) {
+                const mobileField = document.getElementById('mobile');
+                const assignToField = document.getElementById('assign_to');
+                
+                // Validate mobile number
+                const mobile = mobileField.value.replace(/\D/g, '');
+                if (mobile.length < 10 || mobile.length > 12) {
+                    e.preventDefault();
+                    alert('Please enter a valid mobile number (10-12 digits)');
+                    mobileField.focus();
+                    return;
+                }
+                
+                // Validate team member assignment
+                if (!assignToField.value) {
+                    e.preventDefault();
+                    alert('Please select a team member to assign this lead');
+                    assignToField.focus();
+                    return;
+                }
+            });
+        }
+        
+        // Mobile number formatting for admin form
+        const adminMobileInput = document.getElementById('mobile');
+        if (adminMobileInput) {
+            adminMobileInput.addEventListener('input', function(e) {
+                // Remove non-digits
+                this.value = this.value.replace(/\D/g, '');
+                
+                // Limit to 12 digits
+                if (this.value.length > 12) {
+                    this.value = this.value.slice(0, 12);
+                }
+            });
+        }
+    </script>
+</body>
+</html> 

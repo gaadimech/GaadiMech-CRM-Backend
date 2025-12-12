@@ -1,0 +1,1592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>GaadiMech CRM - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        /* Header with brand */
+        .brand-header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: none;
+            padding: 15px 0;
+            margin-bottom: 0;
+        }
+        
+        .brand-header .navbar-brand {
+            color: white;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-decoration: none;
+        }
+        
+        .brand-header .navbar-brand:hover {
+            color: #f8f9fa;
+        }
+        
+        .user-info {
+            color: white;
+            margin-right: 15px;
+        }
+        
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 25px;
+            padding: 8px 20px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            transform: translateY(-1px);
+        }
+        
+        /* Navigation Tabs */
+        .nav-tabs-container {
+            background: white;
+            margin: 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .nav-tabs {
+            border-bottom: none;
+            padding: 0 20px;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: #666;
+            font-weight: 600;
+            padding: 20px 30px;
+            border-radius: 0;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: #667eea;
+            background: transparent;
+            border: none;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: #667eea;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .nav-tabs .nav-link i {
+            margin-right: 8px;
+        }
+        
+        /* Main content area */
+        .content-container {
+            background: white;
+            margin: 0;
+            min-height: calc(100vh - 150px);
+            padding: 30px;
+        }
+        
+        .dashboard-card {
+            transition: transform 0.2s ease-in-out;
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .metric-card-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        .metric-card-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .metric-card-info {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        /* Followup item styles */
+        .followup-item {
+            border-left: 4px solid #007bff;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .followup-item:hover {
+            background-color: #f8f9fa;
+            border-left-color: #28a745;
+        }
+        
+        .overdue {
+            border-left-color: #dc3545;
+        }
+        
+        /* Chart container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        /* Button styles */
+        .quick-action-btn {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            margin: 0.1rem;
+        }
+        
+        /* Performance rank */
+        .performance-rank {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        /* Loading spinner */
+        .loading-spinner {
+            display: none;
+        }
+        
+        /* Button fixes for visibility */
+        .btn {
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white !important;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            color: white !important;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border: none;
+            color: white !important;
+        }
+        
+        .btn-success:hover {
+            background: linear-gradient(135deg, #3d8bfe 0%, #00d4fe 100%);
+            color: white !important;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border: none;
+            color: white !important;
+        }
+        
+        .btn-warning:hover {
+            background: linear-gradient(135deg, #ee7efb 0%, #f44256 100%);
+            color: white !important;
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            border: none;
+            color: white !important;
+        }
+        
+        .btn-info:hover {
+            background: linear-gradient(135deg, #2ed96a 0%, #20e6c7 100%);
+            color: white !important;
+        }
+        
+        .btn-outline-primary {
+            border: 2px solid #667eea;
+            color: #667eea !important;
+            background: white;
+        }
+        
+        .btn-outline-primary:hover {
+            background: #667eea;
+            color: white !important;
+        }
+        
+        /* WhatsApp button styling */
+        .whatsapp-btn {
+            background-color: #25D366 !important;
+            border-color: #25D366 !important;
+            color: white !important;
+        }
+        
+        .whatsapp-btn:hover {
+            background-color: #128C7E !important;
+            border-color: #128C7E !important;
+            color: white !important;
+        }
+        
+        /* Mobile responsive tables */
+        .mobile-table {
+            display: none;
+        }
+        
+        .mobile-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #007bff;
+        }
+        
+        .mobile-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .mobile-card-title {
+            font-weight: 600;
+            font-size: 1rem;
+            color: #333;
+        }
+        
+        .mobile-card-subtitle {
+            font-size: 0.85rem;
+            color: #666;
+            margin: 5px 0;
+        }
+        
+        .mobile-card-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        
+        .mobile-card-actions .btn {
+            font-size: 0.75rem;
+            padding: 5px 10px;
+        }
+        
+        /* Ensure WhatsApp button is visible on mobile */
+        .mobile-card-actions .whatsapp-btn {
+            background-color: #25D366 !important;
+            border-color: #25D366 !important;
+            color: white !important;
+            display: inline-block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+        
+        .mobile-card-actions .whatsapp-btn:hover {
+            background-color: #128C7E !important;
+            border-color: #128C7E !important;
+            color: white !important;
+        }
+        
+        /* Performance mobile card styling */
+        .performance-mobile-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        
+        .performance-rank-badge {
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+        
+        /* Ensure all WhatsApp buttons are visible on mobile */
+        .whatsapp-btn {
+            background-color: #25D366 !important;
+            border-color: #25D366 !important;
+            color: white !important;
+            display: inline-block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+        
+        .whatsapp-btn:hover {
+            background-color: #128C7E !important;
+            border-color: #128C7E !important;
+            color: white !important;
+        }
+        
+        /* Form controls mobile optimization */
+        .form-control,
+        .form-select {
+            font-size: 16px;
+            border-radius: 8px;
+        }
+        
+        /* Quick stats mobile layout */
+        .quick-stats-mobile {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .quick-stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .quick-stat-item:last-child {
+            border-bottom: none;
+        }
+        
+        .quick-stat-number {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .quick-stat-label {
+            font-size: 0.8rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* WhatsApp Template Modal Styles */
+        .template-option {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid #e9ecef;
+        }
+        
+        .template-option:hover {
+            border-color: #25D366;
+            box-shadow: 0 4px 12px rgba(37, 211, 102, 0.15);
+        }
+        
+        .template-option.selected {
+            border-color: #25D366 !important;
+            background-color: rgba(37, 211, 102, 0.1) !important;
+            box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
+        }
+        
+        .template-preview {
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.4;
+        }
+        
+        .template-option .form-check-input {
+            pointer-events: none;
+        }
+        
+        .template-option label {
+            pointer-events: none;
+            cursor: pointer;
+        }
+        
+        #whatsappTemplateModal .modal-dialog {
+            max-width: 700px;
+        }
+        
+        #whatsappTemplateModal .modal-body {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Brand Header -->
+    <nav class="navbar brand-header">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-chart-line me-2"></i>GaadiMech CRM
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="user-info">
+                    <i class="fas fa-user me-1"></i>{{ current_user.name }}
+                </span>
+                <a href="{{ url_for('logout') }}" class="logout-btn">
+                    <i class="fas fa-sign-out-alt me-1"></i>Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs-container">
+        <div class="container">
+            <ul class="nav nav-tabs">
+                <li class="nav-item">
+                    <a class="nav-link active" href="{{ url_for('dashboard') }}">
+                        <i class="fas fa-tachometer-alt"></i>Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('index') }}">
+                        <i class="fas fa-plus"></i>Add Lead
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('followups') }}">
+                        <i class="fas fa-calendar-check"></i>View Followups
+                    </a>
+                </li>
+                {% if current_user.is_admin %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('admin_leads') }}">
+                        <i class="fas fa-users-cog"></i>Admin Leads
+                    </a>
+                </li>
+                {% else %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('team_leads') }}">
+                        <i class="fas fa-tasks"></i>Today's Leads
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content-container">
+        <div class="container-fluid">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show">
+                            <i class="fas fa-info-circle me-2"></i>{{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Filters -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="card dashboard-card">
+                        <div class="card-body">
+                            <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
+                                <div class="row g-2">
+                                    <div class="col-md-4 col-sm-6">
+                                        <label for="date" class="form-label">
+                                            <i class="fas fa-calendar me-1"></i>Date
+                                        </label>
+                                        <input type="date" class="form-control" id="date" name="date" 
+                                               value="{{ selected_date }}" onchange="this.form.submit()">
+                                    </div>
+                                    {% if current_user.is_admin %}
+                                    <div class="col-md-4 col-sm-6">
+                                        <label for="user_id" class="form-label">
+                                            <i class="fas fa-user me-1"></i>Team Member
+                                        </label>
+                                        <select class="form-select" id="user_id" name="user_id" onchange="this.form.submit()">
+                                            <option value="">All Team Members</option>
+                                            {% for user in users %}
+                                            <option value="{{ user.id }}" {% if selected_user_id|string == user.id|string %}selected{% endif %}>
+                                                {{ user.name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    {% endif %}
+                                    <div class="col-md-4 col-12">
+                                        <label class="form-label d-none d-md-block">&nbsp;</label>
+                                        <div class="d-flex flex-column flex-md-row gap-2">
+                                            <button type="button" class="btn btn-outline-primary" onclick="refreshDashboard()">
+                                                <i class="fas fa-sync-alt me-1"></i>Refresh
+                                            </button>
+                                            {% if current_user.is_admin %}
+                                            <button type="button" class="btn btn-outline-warning d-none-mobile" onclick="triggerSnapshot()">
+                                                <i class="fas fa-camera me-1"></i>Fix Count
+                                            </button>
+                                            {% endif %}
+                                            <button type="button" class="btn btn-success d-none-mobile" onclick="exportData()">
+                                                <i class="fas fa-download me-1"></i>Export
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Metrics -->
+            <div class="row mb-3 metric-cards">
+                <div class="col-xl-3 col-md-6 mb-3">
+                    <div class="card metric-card dashboard-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h6 class="text-light">Today's Followups</h6>
+                                    <h3 class="text-white">{{ todays_followups|length }}</h3>
+                                    <small class="text-light opacity-75">{{ todays_followups|length }} currently pending</small>
+                                </div>
+                                <div class="align-self-center">
+                                    <i class="fas fa-calendar-day fa-2x opacity-75"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6 mb-3">
+                    <div class="card metric-card-info dashboard-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h6 class="text-light">Initial Assignment</h6>
+                                    <h3 class="text-white">{{ initial_followups_count }}</h3>
+                                    <small class="text-light opacity-75">Fixed at 5:00 AM IST</small>
+                                </div>
+                                <div class="align-self-center">
+                                    <i class="fas fa-clipboard-list fa-2x opacity-75"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6 mb-3">
+                    <div class="card metric-card-success dashboard-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h6 class="text-light">Completion Rate</h6>
+                                    <h3 class="text-white">{{ completion_rate }}%</h3>
+                                    <small class="text-light opacity-75">{{ completed_followups }} of {{ initial_followups_count }} done</small>
+                                </div>
+                                <div class="align-self-center">
+                                    <i class="fas fa-chart-line fa-2x opacity-75"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6 mb-3">
+                    <div class="card metric-card-warning dashboard-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h6 class="text-light">New Leads Today</h6>
+                                    <h3 class="text-white">{{ daily_leads_count }}</h3>
+                                    <small class="text-light opacity-75">Fresh leads added</small>
+                                </div>
+                                <div class="align-self-center">
+                                    <i class="fas fa-user-plus fa-2x opacity-75"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Dashboard Row -->
+            <div class="row">
+                <!-- Today's Followups -->
+                <div class="col-lg-12 mb-4">
+                    <div class="card dashboard-card">
+                        <div class="card-header bg-white">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-phone me-2"></i>Today's Pending Followups
+                                </h5>
+                                <span class="badge bg-primary">{{ todays_followups|length }} calls</span>
+                            </div>
+                        </div>
+                        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                            {% if todays_followups %}
+                                <!-- Desktop Table -->
+                                <div class="table-responsive d-none d-md-block">
+                                    <table class="table table-sm table-hover">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th style="width: 20%;">Customer</th>
+                                                <th style="width: 20%;">Phone</th>
+                                                <th style="width: 15%;">Status</th>
+                                                <th style="width: 25%;">Remarks</th>
+                                                <th style="width: 20%;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for followup in todays_followups %}
+                                            <tr>
+                                                <td>
+                                                    <strong>{{ followup.customer_name }}</strong>
+                                                    {% if followup.car_registration %}
+                                                    <br><small class="text-muted">{{ followup.car_registration }}</small>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <a href="javascript:void(0);" onclick="copyToDialer('{{ followup.mobile }}')" 
+                                                       class="text-decoration-none fw-bold">{{ followup.mobile }}</a>
+                                                </td>
+                                                <td>
+                                                    <span class="badge status-badge 
+                                                        {% if followup.status == 'Confirmed' %}bg-success
+                                                        {% elif followup.status == 'Did Not Pick Up' %}bg-danger
+                                                        {% elif followup.status == 'Completed' %}bg-info
+                                                        {% else %}bg-warning{% endif %}">
+                                                        {{ followup.status }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <small>{{ followup.remarks or 'No remarks' }}</small>
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        <button class="btn btn-success btn-sm" 
+                                                                onclick="showWhatsAppTemplateModal('{{ followup.mobile }}')" title="Open WhatsApp">
+                                                            <i class="fab fa-whatsapp me-1"></i>WhatsApp
+                                                        </button>
+                                                        <button class="btn btn-info btn-sm" 
+                                                                onclick="makeCall('{{ followup.mobile }}')" title="Make Phone Call">
+                                                            <i class="fas fa-phone me-1"></i>Call
+                                                        </button>
+                                                        <button class="btn btn-warning btn-sm" 
+                                                                onclick="scheduleFollowup({{ followup.id }})" title="Reschedule Followup">
+                                                            <i class="fas fa-calendar-plus me-1"></i>Reschedule
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- Mobile Cards -->
+                                <div class="mobile-table d-block d-md-none">
+                                    {% for followup in todays_followups %}
+                                    <div class="mobile-card">
+                                        <div class="mobile-card-header">
+                                            <div class="mobile-card-title">{{ followup.customer_name }}</div>
+                                            <span class="badge 
+                                                {% if followup.status == 'Confirmed' %}bg-success
+                                                {% elif followup.status == 'Did Not Pick Up' %}bg-danger
+                                                {% elif followup.status == 'Completed' %}bg-info
+                                                {% else %}bg-warning{% endif %}">
+                                                {{ followup.status }}
+                                            </span>
+                                        </div>
+                                        <div class="mobile-card-subtitle">
+                                            <i class="fas fa-phone me-1"></i>
+                                            <a href="javascript:void(0);" onclick="copyToDialer('{{ followup.mobile }}')" 
+                                               class="text-decoration-none fw-bold">{{ followup.mobile }}</a>
+                                        </div>
+                                        {% if followup.car_registration %}
+                                        <div class="mobile-card-subtitle">
+                                            <i class="fas fa-car me-1"></i>{{ followup.car_registration }}
+                                        </div>
+                                        {% endif %}
+                                        {% if followup.remarks %}
+                                        <div class="mobile-card-subtitle">
+                                            <i class="fas fa-comment me-1"></i>{{ followup.remarks }}
+                                        </div>
+                                        {% endif %}
+                                        <div class="mobile-card-actions">
+                                            <button class="btn whatsapp-btn btn-sm text-white" 
+                                                    onclick="showWhatsAppTemplateModal('{{ followup.mobile }}')">
+                                                <i class="fab fa-whatsapp me-1"></i>WhatsApp
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" 
+                                                    onclick="makeCall('{{ followup.mobile }}')">
+                                                <i class="fas fa-phone me-1"></i>Call
+                                            </button>
+                                            <button class="btn btn-warning btn-sm" 
+                                                    onclick="scheduleFollowup({{ followup.id }})">
+                                                <i class="fas fa-calendar-plus me-1"></i>Reschedule
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="text-center py-5">
+                                    <i class="fas fa-calendar-check fa-3x text-muted mb-3"></i>
+                                    <h5 class="text-muted">No followups scheduled for today</h5>
+                                    <p class="text-muted">All caught up! Check other dates or add new leads.</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Section -->
+            <div class="row mb-4">
+                <!-- User Performance Leaderboard -->
+                <div class="col-lg-8 mb-4">
+                    <div class="card dashboard-card">
+                        <div class="card-header bg-white">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-trophy me-2"></i>Team Performance - Daily Progress
+                            </h5>
+                            <small class="text-muted">Based on followups fixed at 5:00 AM IST</small>
+                        </div>
+                        <div class="card-body">
+                            {% if user_performance %}
+                                <!-- Desktop Table -->
+                                <div class="table-responsive d-none d-md-block">
+                                    <table class="table table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Rank</th>
+                                                <th>Team Member</th>
+                                                <th>Assigned</th>
+                                                <th>Worked</th>
+                                                <th>Pending</th>
+                                                <th>Completion Rate</th>
+                                                <th>New Leads</th>
+                                                <th>WhatsApp</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for performance in user_performance %}
+                                            <tr>
+                                                <td>
+                                                    <span class="badge bg-{% if loop.index == 1 %}warning{% elif loop.index == 2 %}secondary{% elif loop.index == 3 %}dark{% else %}light text-dark{% endif %}">
+                                                        #{{ loop.index }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <strong>{{ performance.user.name }}</strong>
+                                                    {% if performance.new_additions > 0 %}
+                                                    <br><small class="text-info">+{{ performance.new_additions }} added today</small>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {{ performance.initial_followups }}
+                                                    {% if performance.new_additions > 0 %}
+                                                    <br><small class="text-muted">({{ performance.original_assignment }} original)</small>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <span class="text-success fw-bold">{{ performance.worked_followups }}</span>
+                                                </td>
+                                                <td>
+                                                    <span class="text-warning fw-bold">{{ performance.pending_followups }}</span>
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="progress me-2" style="width: 60px; height: 8px;">
+                                                            <div class="progress-bar bg-{% if performance.completion_rate >= 80 %}success{% elif performance.completion_rate >= 60 %}warning{% else %}danger{% endif %}" 
+                                                                 style="width: {{ performance.completion_rate }}%"></div>
+                                                        </div>
+                                                        <small class="fw-bold">{{ performance.completion_rate }}%</small>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-info">{{ performance.new_additions }}</span>
+                                                </td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-success" onclick="sendFollowupsToWhatsApp({{ performance.user.id }}, '{{ performance.user.name }}')">
+                                                        <i class="fab fa-whatsapp"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- Mobile Performance Cards -->
+                                <div class="mobile-table d-block d-md-none">
+                                    {% for performance in user_performance %}
+                                    <div class="performance-mobile-card">
+                                        <div class="performance-rank-badge">{{ loop.index }}</div>
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <h6 class="mb-1">{{ performance.user.name }}</h6>
+                                                {% if performance.new_additions > 0 %}
+                                                <div class="small text-info mb-1">+{{ performance.new_additions }} added today</div>
+                                                {% endif %}
+                                                <div class="small text-muted mb-2">
+                                                    <i class="fas fa-tasks me-1"></i>{{ performance.worked_followups }}/{{ performance.initial_followups }} completed
+                                                    {% if performance.new_additions > 0 %}
+                                                    <br><small class="text-muted">({{ performance.original_assignment }} originally assigned)</small>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="progress mb-2" style="height: 8px;">
+                                                    <div class="progress-bar bg-{% if performance.completion_rate >= 80 %}success{% elif performance.completion_rate >= 60 %}warning{% else %}danger{% endif %}" 
+                                                         style="width: {{ performance.completion_rate }}%"></div>
+                                                </div>
+                                                <div class="d-flex gap-3 small">
+                                                    <span><i class="fas fa-clock text-warning me-1"></i>{{ performance.pending_followups }} pending</span>
+                                                    <span><i class="fas fa-plus text-info me-1"></i>{{ performance.new_additions }} new</span>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <div class="h5 mb-1 text-{% if performance.completion_rate >= 80 %}success{% elif performance.completion_rate >= 60 %}warning{% else %}danger{% endif %}">
+                                                    {{ performance.completion_rate }}%
+                                                </div>
+                                                <button class="btn btn-sm whatsapp-btn text-white" 
+                                                        onclick="sendFollowupsToWhatsApp({{ performance.user.id }}, '{{ performance.user.name }}')">
+                                                    <i class="fab fa-whatsapp"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="text-center py-4">
+                                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                                    <h5 class="text-muted">No performance data available</h5>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="col-lg-4 mb-4">
+                    <!-- Desktop Quick Stats -->
+                    <div class="card dashboard-card d-none d-md-block">
+                        <div class="card-header bg-white">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-chart-pie me-2"></i>Quick Stats
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% for status, count in status_counts.items() %}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">{{ status }}</span>
+                                <span class="badge bg-primary">{{ count }}</span>
+                            </div>
+                            {% endfor %}
+                            
+                            <hr>
+                            
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Total Leads</span>
+                                <span class="fw-bold">{{ total_leads }}</span>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Follow-up Rate</span>
+                                <span class="fw-bold">{{ "%.1f"|format(followup_efficiency) }}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Mobile Quick Stats -->
+                    <div class="quick-stats-mobile d-block d-md-none">
+                        <h6 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Quick Stats</h6>
+                        {% for status, count in status_counts.items() %}
+                        <div class="quick-stat-item">
+                            <div class="quick-stat-number">{{ count }}</div>
+                            <div class="quick-stat-label">{{ status }}</div>
+                        </div>
+                        {% endfor %}
+                        
+                        <div class="quick-stat-item">
+                            <div class="quick-stat-number">{{ total_leads }}</div>
+                            <div class="quick-stat-label">Total Leads</div>
+                        </div>
+                        
+                        <div class="quick-stat-item">
+                            <div class="quick-stat-number">{{ "%.1f"|format(followup_efficiency) }}%</div>
+                            <div class="quick-stat-label">Follow-up Rate</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div class="loading-spinner position-fixed top-50 start-50 translate-middle">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <!-- WhatsApp Template Selection Modal -->
+    <div class="modal fade" id="whatsappTemplateModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fab fa-whatsapp me-2 text-success"></i>Choose WhatsApp Message Template
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="whatsappMobile">
+                    <div class="mb-3">
+                        <small class="text-muted">Select a message template to send via WhatsApp:</small>
+                    </div>
+                    
+                    <!-- Template 1: Express Service -->
+                    <div class="template-option card mb-3" onclick="selectTemplate(1)">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <input type="radio" name="template" value="1" id="template1" class="form-check-input me-2">
+                                <label for="template1" class="form-check-label fw-bold">Express Service Reminder</label>
+                            </div>
+                            <div class="template-preview p-2 bg-light rounded small">
+                                Express Service:
+*Express 90-Minute Car Service Reminder*
+
+Hi,
+
+We noticed your recent inquiry about our EXPRESS 90-Min Service - perfect for busy schedules!
+
+Package Includes:
+✓ Engine Oil & Filter Change
+✓ Air Filter Replacement
+✓ Coolant Top-up
+✓ 15-Point Safety Check
+✓ Professional Car Wash
+
+Missing your call earlier? We're ready when you are!
+
+Priority Booking Slot Reserved: +91 8448285289
+Quick Online Booking: www.gaadimech.com/services
+
+Limited slots available - Reply "YES" to confirm your preferred time
+
+Aapki Gaadi, Hamari Zimmedari
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Template 2: Did not Pickup - Hindi -->
+                    <div class="template-option card mb-3" onclick="selectTemplate(2)">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <input type="radio" name="template" value="2" id="template2" class="form-check-input me-2">
+                                <label for="template2" class="form-check-label fw-bold">Did not Pickup - Hindi</label>
+                            </div>
+                            <div class="template-preview p-2 bg-light rounded small">
+                                नमस्ते!
+
+हमने आपसे कॉल पे कनेक्ट करने की कोशिश की थी! आपकी गाड़ी के लिए कुछ अमेजिंग डील्स शेयर करने थे:
+
+✓ EXPRESS 90 MINS Car Service - Fast और Affordable
+✓ FREE PICK और Drop Facility
+✓ Website पर Additional Discounts
+
+सिर्फ 2 मिनट बात करके आप हजारों रुपए बचा सकते हैं!
+
+कब बात करना सुविधाजनक होगा? या फिर सीधे www.GaadiMech.com पर विजिट करें।
+
+Reply करें या कॉल बैक करें
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Template 3: Did not Pickup - English/Hinglish -->
+                    <div class="template-option card mb-3" onclick="selectTemplate(3)">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <input type="radio" name="template" value="3" id="template3" class="form-check-input me-2">
+                                <label for="template3" class="form-check-label fw-bold">Did not Pickup - English/Hinglish</label>
+                            </div>
+                            <div class="template-preview p-2 bg-light rounded small">
+                                Hi!
+
+Humne aapse call pe connect karne ki try ki thi! Aapki car ke liye kuch amazing deals share karne the:
+
+✓ EXPRESS 90 MINS Car Service - Fast aur Affordable
+✓ FREE PICK aur Drop Facility
+✓ Website pe Additional Discounts bhi milenge
+
+Bas 2 minute ki baat hai, but savings thousands mein hogi!
+
+When would be a good time to talk? Ya phir check out www.GaadiMech.com
+
+Reply Karein ya call back Karein
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Template 4: Type my Own -->
+                    <div class="template-option card mb-3" onclick="selectTemplate(4)">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <input type="radio" name="template" value="4" id="template4" class="form-check-input me-2">
+                                <label for="template4" class="form-check-label fw-bold">Type my Own</label>
+                            </div>
+                            <div class="template-preview p-2 bg-light rounded small">
+                                <em class="text-muted">No pre-filled message - you can type your own custom message in WhatsApp</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="sendWhatsAppBtn" onclick="sendSelectedTemplate()" disabled>
+                        <i class="fab fa-whatsapp me-1"></i>Send on WhatsApp
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Follow-up Scheduling Modal -->
+    <div class="modal fade" id="followupModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit me-2"></i>Edit Lead
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="followupForm">
+                        <input type="hidden" id="followupLeadId">
+                        
+                        <div class="mb-3">
+                            <label for="customerName" class="form-label">
+                                <i class="fas fa-user"></i>Customer Name
+                            </label>
+                            <input type="text" class="form-control" id="customerName" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="mobileNumber" class="form-label">
+                                <i class="fas fa-phone"></i>Mobile Number
+                            </label>
+                            <input type="text" class="form-control" id="mobileNumber" required>
+                            <div class="form-text">Enter 10 or 12 digits only (no + required)</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="carRegistration" class="form-label">
+                                <i class="fas fa-car"></i>Car Registration Number
+                            </label>
+                            <input type="text" class="form-control" id="carRegistration" placeholder="E.G., MH12AB1234">
+                            <div class="form-text">Optional: Enter vehicle registration number</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="followupDate" class="form-label">
+                                <i class="fas fa-calendar"></i>Follow-up Date
+                            </label>
+                            <input type="date" class="form-control" id="followupDate" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="status" class="form-label">
+                                <i class="fas fa-info-circle"></i>Status
+                            </label>
+                            <select class="form-select" id="status" required>
+                                <option value="Did Not Pick Up">Did Not Pick Up</option>
+                                <option value="Needs Followup">Needs Followup</option>
+                                <option value="Confirmed">Confirmed</option>
+                                <option value="Open">Open</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Feedback">Feedback</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="followupRemarks" class="form-label">
+                                <i class="fas fa-comment"></i>Remarks
+                            </label>
+                            <textarea class="form-control" id="followupRemarks" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="saveFollowup()">
+                        <i class="fas fa-save me-2"></i>Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Dashboard functionality
+        function copyToDialer(mobile) {
+            navigator.clipboard.writeText(mobile).then(() => {
+                showToast('Phone number copied to clipboard', 'success');
+            }).catch(() => {
+                showToast('Failed to copy phone number', 'error');
+            });
+        }
+
+        function openWhatsApp(mobile) {
+            fetch(`/open_whatsapp/${mobile}`)
+                .then(response => response.json())
+                .then(data => {
+                    window.open(data.url, '_blank');
+                })
+                .catch(error => {
+                    showToast('Error opening WhatsApp', 'error');
+                });
+        }
+
+        function makeCall(mobile) {
+            // Copy number to clipboard for easy dialing
+            navigator.clipboard.writeText(mobile).then(() => {
+                showToast('Phone number copied to clipboard', 'success');
+                // Try to open phone dialer (works on mobile devices)
+                window.location.href = `tel:${mobile}`;
+            }).catch(() => {
+                // Fallback if clipboard access fails
+                window.location.href = `tel:${mobile}`;
+                showToast('Opening phone dialer', 'info');
+            });
+        }
+
+        function updateStatus(leadId, status) {
+            showLoading(true);
+            fetch('/api/dashboard/status-update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    lead_id: leadId,
+                    status: status
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error updating status', 'error');
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+        }
+
+        function scheduleFollowup(leadId) {
+            showLoading(true);
+            fetch(`/api/dashboard/followup/${leadId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('followupLeadId').value = leadId;
+                        document.getElementById('customerName').value = data.customer_name;
+                        document.getElementById('mobileNumber').value = data.mobile;
+                        document.getElementById('carRegistration').value = data.car_registration || '';
+                        document.getElementById('followupDate').value = data.followup_date;
+                        document.getElementById('status').value = data.status;
+                        document.getElementById('followupRemarks').value = data.remarks || '';
+                        new bootstrap.Modal(document.getElementById('followupModal')).show();
+                    } else {
+                        showToast(data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    showToast('Error fetching followup details', 'error');
+                })
+                .finally(() => {
+                    showLoading(false);
+                });
+        }
+
+        function saveFollowup() {
+            const leadId = document.getElementById('followupLeadId').value;
+            const customerName = document.getElementById('customerName').value;
+            const mobileNumber = document.getElementById('mobileNumber').value;
+            const carRegistration = document.getElementById('carRegistration').value;
+            const followupDate = document.getElementById('followupDate').value;
+            const status = document.getElementById('status').value;
+            const remarks = document.getElementById('followupRemarks').value;
+
+            if (!customerName || !mobileNumber) {
+                showToast('Customer Name and Mobile Number are required', 'error');
+                return;
+            }
+
+            showLoading(true);
+            fetch('/api/dashboard/update-followup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    lead_id: leadId,
+                    customer_name: customerName,
+                    mobile: mobileNumber,
+                    car_registration: carRegistration,
+                    followup_date: followupDate,
+                    status: status,
+                    remarks: remarks
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('followupModal')).hide();
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error saving followup changes', 'error');
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+        }
+
+        function refreshDashboard() {
+            showLoading(true);
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+        }
+
+        function triggerSnapshot() {
+            if (!confirm('This will fix today\'s followup counts based on current data. Continue?')) {
+                return;
+            }
+            
+            showLoading(true);
+            fetch('/api/trigger-snapshot', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Daily snapshot completed successfully', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error triggering snapshot', 'error');
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+        }
+
+        function sendFollowupsToWhatsApp(userId, userName) {
+            showLoading(true);
+            
+            fetch(`/api/user-followup-numbers/${userId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.user_mobile) {
+                    // Create WhatsApp message
+                    let message = `🚗 *GaadiMech CRM - Today's Followups*\n`;
+                    message += `Hi ${data.user_name}! 👋\n\n`;
+                    message += `Here are your ${data.total_followups} followups for today (${new Date().toLocaleDateString()}):\n\n`;
+                    
+                    data.followups.forEach((followup, index) => {
+                        message += `${index + 1}. *${followup.customer_name}*\n`;
+                        message += `📞 ${followup.mobile}\n\n`;
+                    });
+                    
+                    message += `💪 Good luck with your followups today!\n`;
+                    message += `📈 Let's achieve great results! 🎯`;
+                    
+                    // Clean mobile number for WhatsApp
+                    let cleanMobile = data.user_mobile.replace(/\D/g, '');
+                    if (cleanMobile.length === 10) {
+                        cleanMobile = '91' + cleanMobile;
+                    }
+                    
+                    // Open WhatsApp
+                    const whatsappUrl = `https://wa.me/${cleanMobile}?text=${encodeURIComponent(message)}`;
+                    window.open(whatsappUrl, '_blank');
+                    
+                    showToast(`Followup list sent to ${data.user_name} via WhatsApp`, 'success');
+                } else {
+                    showToast(data.message || 'No mobile number found for this user', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error fetching followup numbers', 'error');
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+        }
+
+        function exportData() {
+            const date = '{{ selected_date }}';
+            const userId = '{{ selected_user_id }}';
+            
+            // Build URL with query parameters
+            let exportUrl = `/api/export-mobile-numbers?date=${date}`;
+            if (userId) {
+                exportUrl += `&user_id=${userId}`;
+            }
+            
+            // Create a temporary link to trigger download
+            const link = document.createElement('a');
+            link.href = exportUrl;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showToast('Mobile numbers exported successfully', 'success');
+        }
+
+        function showLoading(show) {
+            const spinner = document.querySelector('.loading-spinner');
+            spinner.style.display = show ? 'block' : 'none';
+        }
+
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type === 'error' ? 'danger' : type} position-fixed top-0 end-0 m-3`;
+            toast.style.zIndex = '9999';
+            toast.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.remove();
+                }
+            }, 5000);
+        }
+
+        // Auto-collapse navbar on mobile after clicking
+        const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
+        const navCollapse = document.querySelector('.navbar-collapse');
+        
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth < 992) {
+                    const bsCollapse = new bootstrap.Collapse(navCollapse);
+                    bsCollapse.hide();
+                }
+            });
+        });
+
+        // Performance optimization: Lazy load animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('loaded');
+                }
+            });
+        }, observerOptions);
+
+        // Apply lazy loading to cards
+        document.querySelectorAll('.dashboard-card, .mobile-card, .performance-mobile-card').forEach(card => {
+            card.classList.add('lazy-load');
+            observer.observe(card);
+        });
+
+        // Auto-refresh every 10 minutes on mobile (less frequent to save battery)
+        if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            setInterval(() => {
+                if (document.visibilityState === 'visible') {
+                    location.reload();
+                }
+            }, 600000); // 10 minutes
+        } else {
+            setInterval(() => {
+                if (document.visibilityState === 'visible') {
+                    location.reload();
+                }
+            }, 300000); // 5 minutes for desktop
+        }
+
+        // Prevent zoom on double-tap for iOS
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function (event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+
+        // WhatsApp Template Functions
+        let selectedTemplateId = null;
+        let whatsappTemplates = {
+            1: `Express Service:
+*Express 90-Minute Car Service Reminder*
+
+Hi,
+
+We noticed your recent inquiry about our EXPRESS 90-Min Service - perfect for busy schedules!
+
+Package Includes:
+✓ Engine Oil & Filter Change
+✓ Air Filter Replacement
+✓ Coolant Top-up
+✓ 15-Point Safety Check
+✓ Professional Car Wash
+
+Missing your call earlier? We're ready when you are!
+
+Priority Booking Slot Reserved: +91 8448285289
+Quick Online Booking: www.gaadimech.com/services
+
+Limited slots available - Reply "YES" to confirm your preferred time
+
+Aapki Gaadi, Hamari Zimmedari`,
+            2: `नमस्ते!
+
+हमने आपसे कॉल पे कनेक्ट करने की कोशिश की थी! आपकी गाड़ी के लिए कुछ अमेजिंग डील्स शेयर करने थे:
+
+✓ EXPRESS 90 MINS Car Service - Fast और Affordable
+✓ FREE PICK और Drop Facility
+✓ Website पर Additional Discounts
+
+सिर्फ 2 मिनट बात करके आप हजारों रुपए बचा सकते हैं!
+
+कब बात करना सुविधाजनक होगा? या फिर सीधे www.GaadiMech.com पर विजिट करें।
+
+Reply करें या कॉल बैक करें`,
+            3: `Hi!
+
+Humne aapse call pe connect karne ki try ki thi! Aapki car ke liye kuch amazing deals share karne the:
+
+✓ EXPRESS 90 MINS Car Service - Fast aur Affordable
+✓ FREE PICK aur Drop Facility
+✓ Website pe Additional Discounts bhi milenge
+
+Bas 2 minute ki baat hai, but savings thousands mein hogi!
+
+When would be a good time to talk? Ya phir check out www.GaadiMech.com
+
+Reply Karein ya call back Karein`,
+            4: ``
+        };
+
+        function showWhatsAppTemplateModal(mobile) {
+            document.getElementById('whatsappMobile').value = mobile;
+            selectedTemplateId = null;
+            document.getElementById('sendWhatsAppBtn').disabled = true;
+            
+            // Reset radio buttons
+            document.querySelectorAll('input[name="template"]').forEach(radio => {
+                radio.checked = false;
+            });
+            
+            // Reset card selections
+            document.querySelectorAll('.template-option').forEach(card => {
+                card.classList.remove('border-success', 'bg-success', 'bg-opacity-10', 'selected');
+            });
+            
+            new bootstrap.Modal(document.getElementById('whatsappTemplateModal')).show();
+        }
+
+        function selectTemplate(templateId) {
+            selectedTemplateId = templateId;
+            
+            // Update radio button
+            document.getElementById(`template${templateId}`).checked = true;
+            
+            // Update card styling
+            document.querySelectorAll('.template-option').forEach(card => {
+                card.classList.remove('border-success', 'bg-success', 'bg-opacity-10', 'selected');
+            });
+            
+            // Find and select the clicked template card
+            const selectedCard = document.querySelector(`#template${templateId}`).closest('.template-option');
+            selectedCard.classList.add('border-success', 'bg-success', 'bg-opacity-10', 'selected');
+            
+            // Enable send button
+            document.getElementById('sendWhatsAppBtn').disabled = false;
+        }
+
+        function sendSelectedTemplate() {
+            if (!selectedTemplateId) {
+                showToast('Please select a template first', 'error');
+                return;
+            }
+            
+            const mobile = document.getElementById('whatsappMobile').value;
+            
+            // Clean mobile number for WhatsApp
+            let cleanMobile = mobile.replace(/\D/g, '');
+            if (cleanMobile.length === 10) {
+                cleanMobile = '91' + cleanMobile;
+            }
+            
+            // Create WhatsApp URL - if template 4 (Type my Own), don't include message text
+            let whatsappUrl;
+            if (selectedTemplateId === 4) {
+                whatsappUrl = `https://wa.me/${cleanMobile}`;
+            } else {
+                const message = whatsappTemplates[selectedTemplateId];
+                whatsappUrl = `https://wa.me/${cleanMobile}?text=${encodeURIComponent(message)}`;
+            }
+            
+            // Close modal and open WhatsApp
+            bootstrap.Modal.getInstance(document.getElementById('whatsappTemplateModal')).hide();
+            window.open(whatsappUrl, '_blank');
+            
+            if (selectedTemplateId === 4) {
+                showToast('Opening WhatsApp - type your own message', 'success');
+            } else {
+                showToast('Opening WhatsApp with selected template', 'success');
+            }
+        }
+    </script>
+</body>
+</html>
