@@ -43,9 +43,12 @@ if IS_PRODUCTION:
     # For production: Use exact Elastic Beanstalk origin with credentials support
     # The frontend uses credentials: "include" for session cookies
     # Get the origin from environment or use the known EB URL
-    EB_ORIGIN = os.getenv('EB_ORIGIN', 'http://gaadimech-crm-unified.eba-ftgmu9fp.ap-south-1.elasticbeanstalk.com')
+    EB_ORIGIN_STR = os.getenv('EB_ORIGIN', 'http://gaadimech-crm-unified.eba-ftgmu9fp.ap-south-1.elasticbeanstalk.com')
+    # Parse comma-separated origins (e.g., "https://crm.gaadimech.com,http://crm.gaadimech.com")
+    EB_ORIGINS = [origin.strip() for origin in EB_ORIGIN_STR.split(',') if origin.strip()]
+    print(f"CORS configured for origins: {EB_ORIGINS}")
     CORS(application,
-         origins=[EB_ORIGIN],  # Exact origin allows credentials
+         origins=EB_ORIGINS,  # List of allowed origins
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
          allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
          supports_credentials=True,  # Required for credentials: "include" in frontend
