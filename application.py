@@ -17,6 +17,8 @@ import pytz
 from sqlalchemy import text
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+import json
+from pywebpush import webpush, WebPushException
 
 # Load environment variables
 load_dotenv()
@@ -327,6 +329,24 @@ class TeamAssignment(db.Model):
             status.in_(['Assigned', 'Contacted', 'Added to CRM', 'Ignored']),
             name='valid_assignment_status'
         ),
+    )
+
+class PushSubscription(db.Model):
+    """Store push notification subscriptions for users"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    endpoint = db.Column(db.Text, nullable=False)
+    p256dh = db.Column('p256dh_key', db.Text, nullable=False)  # Public key (mapped to p256dh_key in DB)
+    auth = db.Column('auth_key', db.Text, nullable=False)  # Auth secret (mapped to auth_key in DB)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    # Note: updated_at column doesn't exist in current DB structure
+    
+    # Relationship
+    user = db.relationship('User', backref='push_subscriptions')
+    
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'endpoint', name='unique_user_endpoint'),
     )
 
 class WorkedLead(db.Model):
@@ -3514,6 +3534,17 @@ def admin_leads():
                 db.session.add(new_assignment)
                 db.session.commit()
                 
+                # Send push notification to assigned user
+                try:
+                    send_push_notification(
+                        user_id=int(assign_to),
+                        title='New Lead Assigned',
+                        body=f'A new lead has been assigned to you',
+                        url='/todays-leads'
+                    )
+                except Exception as e:
+                    print(f"Failed to send push notification: {e}")
+                
                 flash('Lead added and assigned successfully!', 'success')
                 return redirect(url_for('admin_leads'))
                 
@@ -3713,6 +3744,17 @@ def edit_unassigned_lead(lead_id):
                         existing_assignment.assigned_at = datetime.now(ist)
                         existing_assignment.assigned_by = current_user.id
                         existing_assignment.status = 'Assigned'  # Reset status for new assignment
+                        db.session.commit()
+                        # Send push notification to newly assigned user
+                        try:
+                            send_push_notification(
+                                user_id=assign_to,
+                                title='Lead Reassigned',
+                                body=f'A lead has been reassigned to you',
+                                url='/todays-leads'
+                            )
+                        except Exception as e:
+                            print(f"Failed to send push notification: {e}")
                         flash('Lead reassigned successfully!', 'success')
                 else:
                     # Create new assignment
@@ -3725,6 +3767,17 @@ def edit_unassigned_lead(lead_id):
                         status='Assigned'
                     )
                     db.session.add(new_assignment)
+                    db.session.commit()
+                    # Send push notification to assigned user
+                    try:
+                        send_push_notification(
+                            user_id=assign_to,
+                            title='New Lead Assigned',
+                            body=f'A new lead has been assigned to you',
+                            url='/todays-leads'
+                        )
+                    except Exception as e:
+                        print(f"Failed to send push notification: {e}")
                     flash('Lead assigned successfully!', 'success')
             else:
                 # If no team member selected, remove today's assignment if it exists
@@ -4556,6 +4609,200 @@ def init_database():
     except Exception as e:
         print(f"Database initialization error: {e}")
         db.session.rollback()
+
+# ==================== PUSH NOTIFICATION FUNCTIONS ====================
+
+def send_push_notification(user_id, title, body, url=None):
+    """Send push notification to all subscriptions of a user"""
+    try:
+        subscriptions = PushSubscription.query.filter_by(user_id=user_id).all()
+        if not subscriptions:
+            print(f"No push subscriptions found for user {user_id}")
+            return
+        
+        # Get VAPID keys from environment
+        vapid_private_key = os.getenv('VAPID_PRIVATE_KEY')
+        vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
+        vapid_claim_email = os.getenv('VAPID_CLAIM_EMAIL', 'mailto:admin@gaadimech.com')
+        
+        if not vapid_private_key or not vapid_public_key:
+            print("VAPID keys not configured. Push notifications disabled.")
+            return
+        
+        # Prepare notification payload
+        notification_data = {
+            'title': title,
+            'body': body,
+            'icon': '/icon-192x192.png',  # You can add this icon later
+            'badge': '/badge-72x72.png',  # You can add this badge later
+            'tag': 'lead-assignment',
+            'requireInteraction': False,
+            'data': {
+                'url': url or '/todays-leads'
+            }
+        }
+        
+        success_count = 0
+        failed_count = 0
+        
+        for subscription in subscriptions:
+            try:
+                subscription_info = {
+                    'endpoint': subscription.endpoint,
+                    'keys': {
+                        'p256dh': subscription.p256dh,
+                        'auth': subscription.auth
+                    }
+                }
+                
+                webpush(
+                    subscription_info=subscription_info,
+                    data=json.dumps(notification_data),
+                    vapid_private_key=vapid_private_key,
+                    vapid_claims={
+                        'sub': vapid_claim_email
+                    }
+                )
+                success_count += 1
+            except WebPushException as e:
+                print(f"Failed to send push notification to subscription {subscription.id}: {e}")
+                # If subscription is invalid, remove it
+                if e.response and e.response.status_code in [410, 404]:
+                    db.session.delete(subscription)
+                    db.session.commit()
+                failed_count += 1
+            except Exception as e:
+                print(f"Unexpected error sending push notification: {e}")
+                failed_count += 1
+        
+        print(f"Push notifications sent: {success_count} successful, {failed_count} failed")
+        
+    except Exception as e:
+        print(f"Error in send_push_notification: {e}")
+        import traceback
+        traceback.print_exc()
+
+@application.route('/api/push/subscribe', methods=['POST', 'OPTIONS'])
+@login_required
+def api_push_subscribe():
+    """Register or update push notification subscription"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
+        return response
+    
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Invalid request format'}), 400
+        
+        data = request.get_json()
+        endpoint = data.get('endpoint')
+        p256dh = data.get('keys', {}).get('p256dh')
+        auth = data.get('keys', {}).get('auth')
+        user_agent = request.headers.get('User-Agent', '')
+        
+        if not endpoint or not p256dh or not auth:
+            return jsonify({'success': False, 'message': 'Missing required subscription data'}), 400
+        
+        # Check if subscription already exists
+        existing = PushSubscription.query.filter_by(
+            user_id=current_user.id,
+            endpoint=endpoint
+        ).first()
+        
+        if existing:
+            # Update existing subscription
+            existing.p256dh = p256dh
+            existing.auth = auth
+            existing.user_agent = user_agent
+            existing.updated_at = datetime.now(ist)
+        else:
+            # Create new subscription
+            subscription = PushSubscription(
+                user_id=current_user.id,
+                endpoint=endpoint,
+                p256dh=p256dh,
+                auth=auth,
+                user_agent=user_agent
+            )
+            db.session.add(subscription)
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Push subscription registered successfully'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error registering push subscription: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': 'Failed to register subscription'}), 500
+
+@application.route('/api/push/vapid-public-key', methods=['GET', 'OPTIONS'])
+def api_push_vapid_public_key():
+    """Get VAPID public key for push notification subscription"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
+        return response
+    
+    try:
+        vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
+        if not vapid_public_key:
+            # Return 200 with empty key instead of 500 - frontend will handle it
+            return jsonify({'publicKey': '', 'error': 'VAPID public key not configured'}), 200
+        
+        return jsonify({'publicKey': vapid_public_key})
+    except Exception as e:
+        print(f"Error getting VAPID public key: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'publicKey': '', 'error': str(e)}), 200
+
+@application.route('/api/push/unsubscribe', methods=['POST', 'OPTIONS'])
+@login_required
+def api_push_unsubscribe():
+    """Remove push notification subscription"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
+        return response
+    
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Invalid request format'}), 400
+        
+        data = request.get_json()
+        endpoint = data.get('endpoint')
+        
+        if not endpoint:
+            return jsonify({'success': False, 'message': 'Missing endpoint'}), 400
+        
+        # Find and delete subscription
+        subscription = PushSubscription.query.filter_by(
+            user_id=current_user.id,
+            endpoint=endpoint
+        ).first()
+        
+        if subscription:
+            db.session.delete(subscription)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Push subscription removed successfully'})
+        else:
+            return jsonify({'success': False, 'message': 'Subscription not found'}), 404
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error removing push subscription: {e}")
+        return jsonify({'success': False, 'message': 'Failed to remove subscription'}), 500
 
 if __name__ == '__main__':
     # Initialize database when application starts
