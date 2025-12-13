@@ -33,7 +33,8 @@ class CustomerInfoParser:
             'volkswagen': ['polo', 'vento', 'ameo', 'jetta', 'passat', 'tiguan'],
             'skoda': ['fabia', 'rapid', 'octavia', 'superb', 'kodiaq', 'karoq'],
             'nissan': ['micra', 'sunny', 'terrano', 'kicks', 'gt-r'],
-            'renault': ['kwid', 'duster', 'captur', 'lodgy', 'scala', 'pulse', 'fluence']
+            'renault': ['kwid', 'duster', 'captur', 'lodgy', 'scala', 'pulse', 'fluence'],
+            'jeep': ['compass', 'wrangler', 'grand cherokee', 'meridian', 'renegade']
         }
         
         # Service types mapping
@@ -215,10 +216,24 @@ class CustomerInfoParser:
         result = {'manufacturer': None, 'model': None}
         
         # Look for "Car:" pattern (may contain both manufacturer and model)
-        car_pattern = r'🚗\s*Car\s*[:\-]?\s*([a-zA-Z0-9\s]+?)(?:\n|🔧|$)'
-        car_matches = re.findall(car_pattern, text, re.IGNORECASE)
-        if car_matches:
-            car_text = car_matches[0].strip()
+        # Handle both formats: "🚗 Car: Model" and "🚗 Vehicle\nCar: Model"
+        car_patterns = [
+            r'🚗\s*Car\s*[:\-]?\s*([a-zA-Z0-9\s]+?)(?:\n|🔧|⛽|$)',
+            r'(?:🚗\s*Vehicle\s*\n\s*)?Car\s*[:\-]?\s*([a-zA-Z0-9\s]+?)(?:\n|🔧|⛽|$)',
+            r'Car\s*[:\-]?\s*([a-zA-Z0-9\s]+?)(?:\n|🔧|⛽|$)',
+        ]
+        
+        car_text = None
+        for pattern in car_patterns:
+            car_matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
+            if car_matches:
+                # re.findall returns a list of strings when there's one capture group
+                car_text = car_matches[0] if car_matches else None
+                if car_text:
+                    car_text = car_text.strip()
+                    break
+        
+        if car_text:
             # Try to split manufacturer and model
             car_words = car_text.split()
             if len(car_words) >= 2:
@@ -242,6 +257,17 @@ class CustomerInfoParser:
                     if not result['manufacturer']:
                         # Just set as model if no manufacturer found
                         result['model'] = car_text.title()
+            else:
+                # Single word - could be model or manufacturer
+                car_text_lower = car_text.lower()
+                found_mfg = False
+                for mfg in self.car_manufacturers.keys():
+                    if mfg == car_text_lower or car_text_lower in mfg or mfg in car_text_lower:
+                        result['manufacturer'] = mfg.title()
+                        found_mfg = True
+                        break
+                if not found_mfg:
+                    result['model'] = car_text.title()
         
         # Look for manufacturer patterns
         manufacturer_patterns = [

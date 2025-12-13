@@ -731,12 +731,21 @@ def get_initial_followup_count(user_id, date):
         return current_count
 
 def capture_daily_snapshot():
-    """Capture daily snapshot of followup counts at 5AM IST - this fixes the day's workload"""
+    """
+    Capture daily snapshot of followup counts at 5AM IST - this fixes the day's workload.
+    
+    This function:
+    1. Counts all leads scheduled for today (followup_date = today) for each user
+    2. Stores the initial_count in DailyFollowupCount table
+    3. This count is used to calculate completion rates throughout the day
+    4. Includes leads from previous days that have followup_date set for today
+    """
     try:
-        print(f"Running daily snapshot at {datetime.now(ist)}")
+        snapshot_time = datetime.now(ist)
+        print(f"🔄 [SCHEDULER] Starting daily snapshot at {snapshot_time.strftime('%Y-%m-%d %H:%M:%S IST')}")
         
         # Get today's date in IST
-        today = datetime.now(ist).date()
+        today = snapshot_time.date()
         today_start = ist.localize(datetime.combine(today, time.min))
         tomorrow_start = today_start + timedelta(days=1)
         
@@ -744,16 +753,36 @@ def capture_daily_snapshot():
         today_start_utc = today_start.astimezone(pytz.UTC)
         tomorrow_start_utc = tomorrow_start.astimezone(pytz.UTC)
         
+        print(f"📅 [SCHEDULER] Snapshot date: {today} (IST)")
+        print(f"📅 [SCHEDULER] Time range: {today_start_utc} to {tomorrow_start_utc} (UTC)")
+        
         # Get all users
         users = User.query.all()
+        total_followups = 0
+        user_snapshots = []
         
         for user in users:
             # Count leads scheduled for today for this user
+            # This includes:
+            # - Leads created today with followup_date = today
+            # - Leads from previous days with followup_date = today (carried over)
             followup_count = Lead.query.filter(
                 Lead.creator_id == user.id,
                 Lead.followup_date >= today_start_utc,
                 Lead.followup_date < tomorrow_start_utc
             ).count()
+            
+            # Also count leads by status for better tracking
+            status_breakdown = db.session.query(
+                Lead.status,
+                db.func.count(Lead.id)
+            ).filter(
+                Lead.creator_id == user.id,
+                Lead.followup_date >= today_start_utc,
+                Lead.followup_date < tomorrow_start_utc
+            ).group_by(Lead.status).all()
+            
+            status_summary = {status: count for status, count in status_breakdown}
             
             # Create or update the daily count record
             daily_count = DailyFollowupCount.query.filter_by(
@@ -761,46 +790,110 @@ def capture_daily_snapshot():
                 date=today
             ).first()
             
+            old_count = daily_count.initial_count if daily_count else None
+            
             if daily_count:
                 # Update existing record - always override with current snapshot
                 daily_count.initial_count = followup_count
+                daily_count.created_at = snapshot_time  # Update timestamp
             else:
                 # Create new record
                 daily_count = DailyFollowupCount(
                     user_id=user.id,
                     date=today,
-                    initial_count=followup_count
+                    initial_count=followup_count,
+                    created_at=snapshot_time
                 )
                 db.session.add(daily_count)
             
-            print(f"User {user.name}: {followup_count} followups fixed for {today}")
+            total_followups += followup_count
+            user_snapshots.append({
+                'user': user.name,
+                'count': followup_count,
+                'old_count': old_count,
+                'status_breakdown': status_summary
+            })
+            
+            change_indicator = f" (was {old_count})" if old_count is not None and old_count != followup_count else ""
+            print(f"✅ [SCHEDULER] User {user.name}: {followup_count} followups fixed for {today}{change_indicator}")
+            if status_summary:
+                print(f"   └─ Status breakdown: {status_summary}")
         
         db.session.commit()
-        print(f"Daily snapshot completed successfully for {today}")
+        
+        print(f"✅ [SCHEDULER] Daily snapshot completed successfully for {today}")
+        print(f"📊 [SCHEDULER] Total followups across all users: {total_followups}")
+        print(f"👥 [SCHEDULER] Users processed: {len(users)}")
+        
+        return {
+            'success': True,
+            'date': today.isoformat(),
+            'timestamp': snapshot_time.isoformat(),
+            'total_followups': total_followups,
+            'users_processed': len(users),
+            'user_snapshots': user_snapshots
+        }
         
     except Exception as e:
-        print(f"Error in daily snapshot: {e}")
+        error_msg = f"❌ [SCHEDULER] Error in daily snapshot: {e}"
+        print(error_msg)
+        import traceback
+        traceback.print_exc()
         db.session.rollback()
+        return {
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now(ist).isoformat()
+        }
 
 # Initialize scheduler for daily snapshot (after function definition)
 def init_scheduler():
-    """Initialize and start the background scheduler for daily snapshots"""
+    """
+    Initialize and start the background scheduler for daily snapshots.
+    
+    The scheduler runs at 5:00 AM IST every day to:
+    1. Capture initial followup counts for each user
+    2. Store them in DailyFollowupCount table
+    3. Fix the day's workload baseline for completion rate calculations
+    
+    Note: In production with gunicorn (multiple workers), the scheduler will run
+    in each worker. This is acceptable for this use case as the snapshot function
+    is idempotent (can run multiple times safely).
+    """
     # Check if we should run the scheduler
-    # In production with gunicorn, we might have multiple workers
-    # Only start scheduler if explicitly enabled or running in development
     enable_scheduler = os.getenv('ENABLE_SCHEDULER', 'true').lower() == 'true'
     
     # Check if we're running under gunicorn (production)
     is_gunicorn = 'gunicorn' in os.environ.get('SERVER_SOFTWARE', '').lower() or \
                   'gunicorn' in ' '.join(sys.argv)
     
+    print(f"🔧 [SCHEDULER] Initialization check:")
+    print(f"   ENABLE_SCHEDULER={enable_scheduler}")
+    print(f"   Running under gunicorn: {is_gunicorn}")
+    
     if is_gunicorn and not enable_scheduler:
-        print("ℹ️  Scheduler disabled in gunicorn mode (set ENABLE_SCHEDULER=true to enable)")
+        print("ℹ️  [SCHEDULER] Scheduler disabled in gunicorn mode (set ENABLE_SCHEDULER=true to enable)")
         print("   Consider using a separate scheduler process or cron job for production")
+        return None
+    
+    if not enable_scheduler:
+        print("ℹ️  [SCHEDULER] Scheduler disabled via ENABLE_SCHEDULER=false")
+        print("   Daily snapshot will need to be triggered manually via /api/trigger-snapshot")
         return None
     
     try:
         scheduler = BackgroundScheduler(timezone=ist)
+        
+        # Calculate next run time for display
+        now_ist = datetime.now(ist)
+        today_5am = ist.localize(datetime.combine(now_ist.date(), time(5, 0)))
+        if now_ist >= today_5am:
+            # If it's past 5 AM today, next run is tomorrow at 5 AM
+            next_run = ist.localize(datetime.combine(now_ist.date() + timedelta(days=1), time(5, 0)))
+        else:
+            # Next run is today at 5 AM
+            next_run = today_5am
+        
         scheduler.add_job(
             func=capture_daily_snapshot,
             trigger=CronTrigger(hour=5, minute=0, timezone=ist),  # 5:00 AM IST daily
@@ -809,10 +902,18 @@ def init_scheduler():
             replace_existing=True
         )
         scheduler.start()
-        print("✅ Daily snapshot scheduler started - will run at 5:00 AM IST daily")
+        
+        print("✅ [SCHEDULER] Daily snapshot scheduler started successfully")
+        print(f"   ⏰ Scheduled to run daily at 5:00 AM IST")
+        print(f"   📅 Next run: {next_run.strftime('%Y-%m-%d %H:%M:%S IST')}")
+        print(f"   ⏳ Time until next run: {next_run - now_ist}")
+        print(f"   📊 This will capture initial followup counts for completion rate tracking")
+        
         return scheduler
     except Exception as e:
-        print(f"⚠️  Failed to start scheduler: {e}")
+        print(f"⚠️  [SCHEDULER] Failed to start scheduler: {e}")
+        import traceback
+        traceback.print_exc()
         print("   Daily snapshot will need to be triggered manually via /api/trigger-snapshot")
         return None
 
@@ -1083,11 +1184,99 @@ def trigger_manual_snapshot():
         return jsonify({'success': False, 'message': 'Admin access required'})
     
     try:
-        with application.app_context():
-            capture_daily_snapshot()
-        return jsonify({'success': True, 'message': 'Daily snapshot completed successfully'})
+        result = capture_daily_snapshot()
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'message': 'Daily snapshot completed successfully',
+                'data': result
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'Error: {result.get("error", "Unknown error")}',
+                'data': result
+            })
     except Exception as e:
         return jsonify({'success': False, 'message': f'Error: {str(e)}'})
+
+@application.route('/api/scheduler/status', methods=['GET'])
+@login_required
+def scheduler_status():
+    """Check scheduler status and last snapshot information"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Admin access required'})
+    
+    try:
+        # Check if scheduler is enabled
+        enable_scheduler = os.getenv('ENABLE_SCHEDULER', 'true').lower() == 'true'
+        
+        # Get today's snapshot
+        today = datetime.now(ist).date()
+        today_snapshot = DailyFollowupCount.query.filter_by(date=today).all()
+        
+        # Get yesterday's snapshot for comparison
+        yesterday = today - timedelta(days=1)
+        yesterday_snapshot = DailyFollowupCount.query.filter_by(date=yesterday).all()
+        
+        # Get most recent snapshot timestamp
+        most_recent = DailyFollowupCount.query.order_by(
+            DailyFollowupCount.created_at.desc()
+        ).first()
+        
+        # Check next scheduled run (5 AM IST tomorrow)
+        tomorrow_5am = ist.localize(datetime.combine(today + timedelta(days=1), time(5, 0)))
+        next_run = tomorrow_5am
+        
+        # If it's before 5 AM today, next run is today at 5 AM
+        now_ist = datetime.now(ist)
+        today_5am = ist.localize(datetime.combine(today, time(5, 0)))
+        if now_ist < today_5am:
+            next_run = today_5am
+        
+        status_data = {
+            'scheduler_enabled': enable_scheduler,
+            'current_time_ist': now_ist.strftime('%Y-%m-%d %H:%M:%S IST'),
+            'today': today.isoformat(),
+            'today_snapshot': {
+                'exists': len(today_snapshot) > 0,
+                'user_count': len(today_snapshot),
+                'total_initial_followups': sum(s.initial_count for s in today_snapshot),
+                'details': [
+                    {
+                        'user_id': s.user_id,
+                        'user_name': User.query.get(s.user_id).name if User.query.get(s.user_id) else 'Unknown',
+                        'initial_count': s.initial_count,
+                        'snapshot_time': s.created_at.strftime('%Y-%m-%d %H:%M:%S IST') if s.created_at else None
+                    }
+                    for s in today_snapshot
+                ]
+            },
+            'yesterday_snapshot': {
+                'exists': len(yesterday_snapshot) > 0,
+                'user_count': len(yesterday_snapshot),
+                'total_initial_followups': sum(s.initial_count for s in yesterday_snapshot) if yesterday_snapshot else 0
+            },
+            'most_recent_snapshot': {
+                'date': most_recent.date.isoformat() if most_recent else None,
+                'timestamp': most_recent.created_at.strftime('%Y-%m-%d %H:%M:%S IST') if most_recent and most_recent.created_at else None
+            },
+            'next_scheduled_run': next_run.strftime('%Y-%m-%d %H:%M:%S IST'),
+            'time_until_next_run': str(next_run - now_ist) if next_run > now_ist else 'Past due'
+        }
+        
+        return jsonify({
+            'success': True,
+            'status': status_data
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error checking scheduler status: {str(e)}'
+        })
 
 @application.route('/api/export-mobile-numbers', methods=['GET'])
 @login_required
