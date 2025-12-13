@@ -3535,6 +3535,9 @@ def admin_leads():
                 db.session.commit()
                 
                 # Send push notification to assigned user
+                print(f"\n📤 Attempting to send push notification for lead assignment")
+                print(f"   Lead ID: {new_unassigned_lead.id}")
+                print(f"   Assigned to User ID: {assign_to}")
                 try:
                     send_push_notification(
                         user_id=int(assign_to),
@@ -3543,7 +3546,9 @@ def admin_leads():
                         url='/todays-leads'
                     )
                 except Exception as e:
-                    print(f"Failed to send push notification: {e}")
+                    print(f"❌ Exception when calling send_push_notification: {e}")
+                    import traceback
+                    traceback.print_exc()
                 
                 flash('Lead added and assigned successfully!', 'success')
                 return redirect(url_for('admin_leads'))
@@ -3746,6 +3751,9 @@ def edit_unassigned_lead(lead_id):
                         existing_assignment.status = 'Assigned'  # Reset status for new assignment
                         db.session.commit()
                         # Send push notification to newly assigned user
+                        print(f"\n📤 Attempting to send push notification for lead reassignment")
+                        print(f"   Lead ID: {lead.id}")
+                        print(f"   Reassigned to User ID: {assign_to}")
                         try:
                             send_push_notification(
                                 user_id=assign_to,
@@ -3754,7 +3762,9 @@ def edit_unassigned_lead(lead_id):
                                 url='/todays-leads'
                             )
                         except Exception as e:
-                            print(f"Failed to send push notification: {e}")
+                            print(f"❌ Exception when calling send_push_notification: {e}")
+                            import traceback
+                            traceback.print_exc()
                         flash('Lead reassigned successfully!', 'success')
                 else:
                     # Create new assignment
@@ -3769,6 +3779,9 @@ def edit_unassigned_lead(lead_id):
                     db.session.add(new_assignment)
                     db.session.commit()
                     # Send push notification to assigned user
+                    print(f"\n📤 Attempting to send push notification for new lead assignment")
+                    print(f"   Lead ID: {lead.id}")
+                    print(f"   Assigned to User ID: {assign_to}")
                     try:
                         send_push_notification(
                             user_id=assign_to,
@@ -3777,7 +3790,9 @@ def edit_unassigned_lead(lead_id):
                             url='/todays-leads'
                         )
                     except Exception as e:
-                        print(f"Failed to send push notification: {e}")
+                        print(f"❌ Exception when calling send_push_notification: {e}")
+                        import traceback
+                        traceback.print_exc()
                     flash('Lead assigned successfully!', 'success')
             else:
                 # If no team member selected, remove today's assignment if it exists
@@ -4614,10 +4629,24 @@ def init_database():
 
 def send_push_notification(user_id, title, body, url=None):
     """Send push notification to all subscriptions of a user"""
+    timestamp = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
+    print(f"\n{'='*60}")
+    print(f"[{timestamp}] 🔔 PUSH NOTIFICATION ATTEMPT")
+    print(f"{'='*60}")
+    print(f"User ID: {user_id}")
+    
     try:
+        # Get user info for logging
+        user = User.query.get(user_id)
+        user_name = user.name if user else f"Unknown (ID: {user_id})"
+        print(f"User: {user_name} (username: {user.username if user else 'N/A'})")
+        
         subscriptions = PushSubscription.query.filter_by(user_id=user_id).all()
+        print(f"Found {len(subscriptions)} subscription(s) for user {user_id}")
+        
         if not subscriptions:
-            print(f"No push subscriptions found for user {user_id}")
+            print(f"❌ No push subscriptions found for user {user_id} ({user_name})")
+            print(f"{'='*60}\n")
             return
         
         # Get VAPID keys from environment
@@ -4625,8 +4654,13 @@ def send_push_notification(user_id, title, body, url=None):
         vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
         vapid_claim_email = os.getenv('VAPID_CLAIM_EMAIL', 'mailto:admin@gaadimech.com')
         
+        print(f"VAPID Private Key: {'✅ Present' if vapid_private_key else '❌ Missing'}")
+        print(f"VAPID Public Key: {'✅ Present' if vapid_public_key else '❌ Missing'}")
+        print(f"VAPID Claim Email: {vapid_claim_email}")
+        
         if not vapid_private_key or not vapid_public_key:
-            print("VAPID keys not configured. Push notifications disabled.")
+            print("❌ VAPID keys not configured. Push notifications disabled.")
+            print(f"{'='*60}\n")
             return
         
         # Prepare notification payload
@@ -4642,10 +4676,20 @@ def send_push_notification(user_id, title, body, url=None):
             }
         }
         
+        print(f"Notification Title: {title}")
+        print(f"Notification Body: {body}")
+        print(f"Notification URL: {url or '/todays-leads'}")
+        
         success_count = 0
         failed_count = 0
         
-        for subscription in subscriptions:
+        for idx, subscription in enumerate(subscriptions, 1):
+            print(f"\n--- Processing Subscription {idx}/{len(subscriptions)} ---")
+            print(f"Subscription ID: {subscription.id}")
+            print(f"Endpoint: {subscription.endpoint[:50]}...")
+            print(f"User Agent: {subscription.user_agent or 'N/A'}")
+            print(f"Created At: {subscription.created_at}")
+            
             try:
                 subscription_info = {
                     'endpoint': subscription.endpoint,
@@ -4655,6 +4699,7 @@ def send_push_notification(user_id, title, body, url=None):
                     }
                 }
                 
+                print("Sending webpush...")
                 webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(notification_data),
@@ -4664,23 +4709,34 @@ def send_push_notification(user_id, title, body, url=None):
                     }
                 )
                 success_count += 1
+                print(f"✅ Successfully sent push notification to subscription {subscription.id}")
             except WebPushException as e:
-                print(f"Failed to send push notification to subscription {subscription.id}: {e}")
+                print(f"❌ Failed to send push notification to subscription {subscription.id}")
+                print(f"   Error: {e}")
+                if e.response:
+                    print(f"   Response Status: {e.response.status_code}")
+                    print(f"   Response Text: {e.response.text[:200]}")
                 # If subscription is invalid, remove it
                 if e.response and e.response.status_code in [410, 404]:
+                    print(f"   🗑️  Removing invalid subscription {subscription.id} (status {e.response.status_code})")
                     db.session.delete(subscription)
                     db.session.commit()
                 failed_count += 1
             except Exception as e:
-                print(f"Unexpected error sending push notification: {e}")
+                print(f"❌ Unexpected error sending push notification: {e}")
+                import traceback
+                traceback.print_exc()
                 failed_count += 1
         
-        print(f"Push notifications sent: {success_count} successful, {failed_count} failed")
+        print(f"\n{'='*60}")
+        print(f"📊 SUMMARY: {success_count} successful, {failed_count} failed")
+        print(f"{'='*60}\n")
         
     except Exception as e:
-        print(f"Error in send_push_notification: {e}")
+        print(f"❌ Error in send_push_notification: {e}")
         import traceback
         traceback.print_exc()
+        print(f"{'='*60}\n")
 
 @application.route('/api/push/subscribe', methods=['POST', 'OPTIONS'])
 @login_required
@@ -4713,14 +4769,23 @@ def api_push_subscribe():
             endpoint=endpoint
         ).first()
         
+        timestamp = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
         if existing:
             # Update existing subscription
+            print(f"\n[{timestamp}] 🔄 Updating existing push subscription")
+            print(f"   User: {current_user.name} (ID: {current_user.id}, username: {current_user.username})")
+            print(f"   Subscription ID: {existing.id}")
+            print(f"   Endpoint: {endpoint[:60]}...")
             existing.p256dh = p256dh
             existing.auth = auth
             existing.user_agent = user_agent
             existing.updated_at = datetime.now(ist)
         else:
             # Create new subscription
+            print(f"\n[{timestamp}] ✅ New push subscription registered")
+            print(f"   User: {current_user.name} (ID: {current_user.id}, username: {current_user.username})")
+            print(f"   Endpoint: {endpoint[:60]}...")
+            print(f"   User Agent: {user_agent[:100] if user_agent else 'N/A'}")
             subscription = PushSubscription(
                 user_id=current_user.id,
                 endpoint=endpoint,
@@ -4731,6 +4796,7 @@ def api_push_subscribe():
             db.session.add(subscription)
         
         db.session.commit()
+        print(f"   ✅ Subscription saved successfully\n")
         return jsonify({'success': True, 'message': 'Push subscription registered successfully'})
         
     except Exception as e:
@@ -4803,6 +4869,111 @@ def api_push_unsubscribe():
         db.session.rollback()
         print(f"Error removing push subscription: {e}")
         return jsonify({'success': False, 'message': 'Failed to remove subscription'}), 500
+
+@application.route('/api/push/debug/subscriptions', methods=['GET'])
+@login_required
+def api_push_debug_subscriptions():
+    """Debug endpoint to check push notification subscriptions for current user or specified user (admin only)"""
+    try:
+        # Get user_id from query params (admin only) or use current user
+        user_id_param = request.args.get('user_id', type=int)
+        
+        if user_id_param:
+            # Only admins can check other users' subscriptions
+            if not current_user.is_admin:
+                return jsonify({'error': 'Admin access required to check other users'}), 403
+            target_user_id = user_id_param
+        else:
+            target_user_id = current_user.id
+        
+        # Get user info
+        user = User.query.get(target_user_id)
+        if not user:
+            return jsonify({'error': f'User {target_user_id} not found'}), 404
+        
+        # Get subscriptions
+        subscriptions = PushSubscription.query.filter_by(user_id=target_user_id).all()
+        
+        # Check VAPID keys
+        vapid_private_key = os.getenv('VAPID_PRIVATE_KEY')
+        vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
+        vapid_claim_email = os.getenv('VAPID_CLAIM_EMAIL', 'mailto:admin@gaadimech.com')
+        
+        subscriptions_data = []
+        for sub in subscriptions:
+            subscriptions_data.append({
+                'id': sub.id,
+                'endpoint': sub.endpoint,
+                'endpoint_short': sub.endpoint[:50] + '...' if len(sub.endpoint) > 50 else sub.endpoint,
+                'user_agent': sub.user_agent,
+                'created_at': sub.created_at.isoformat() if sub.created_at else None,
+                'has_p256dh': bool(sub.p256dh),
+                'has_auth': bool(sub.auth),
+            })
+        
+        return jsonify({
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'name': user.name
+            },
+            'subscriptions_count': len(subscriptions),
+            'subscriptions': subscriptions_data,
+            'vapid_config': {
+                'private_key_configured': bool(vapid_private_key),
+                'public_key_configured': bool(vapid_public_key),
+                'claim_email': vapid_claim_email,
+                'public_key_preview': vapid_public_key[:50] + '...' if vapid_public_key and len(vapid_public_key) > 50 else vapid_public_key
+            }
+        })
+    except Exception as e:
+        print(f"Error in api_push_debug_subscriptions: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/push/debug/user-by-username', methods=['GET'])
+@login_required
+def api_push_debug_user_by_username():
+    """Debug endpoint to find user by username and check their subscriptions (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        username = request.args.get('username')
+        if not username:
+            return jsonify({'error': 'username parameter required'}), 400
+        
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return jsonify({'error': f'User with username "{username}" not found'}), 404
+        
+        # Get subscriptions
+        subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
+        
+        subscriptions_data = []
+        for sub in subscriptions:
+            subscriptions_data.append({
+                'id': sub.id,
+                'endpoint_short': sub.endpoint[:80] + '...' if len(sub.endpoint) > 80 else sub.endpoint,
+                'user_agent': sub.user_agent,
+                'created_at': sub.created_at.isoformat() if sub.created_at else None,
+            })
+        
+        return jsonify({
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'name': user.name
+            },
+            'subscriptions_count': len(subscriptions),
+            'subscriptions': subscriptions_data
+        })
+    except Exception as e:
+        print(f"Error in api_push_debug_user_by_username: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     # Initialize database when application starts
