@@ -1003,6 +1003,16 @@ def calculate_completion_rate(initial_count, worked_count):
 @login_required
 @limiter.limit("30 per minute")
 def add_lead():
+    # Check if this is an API request from Next.js frontend
+    # Next.js frontend sends form data but we can detect it by checking Origin/Referer
+    is_api_request = (
+        request.headers.get('Accept', '').startswith('application/json') or
+        request.headers.get('Content-Type', '').startswith('application/json') or
+        request.headers.get('Origin', '').endswith('.gaadimech.com') or
+        'crm.gaadimech.com' in request.headers.get('Referer', '') or
+        'localhost:3000' in request.headers.get('Origin', '')
+    )
+    
     try:
         customer_name = request.form.get('customer_name')
         mobile = request.form.get('mobile')
@@ -1020,12 +1030,16 @@ def add_lead():
         followup_date = ist.localize(datetime.combine(followup_date_only, datetime.min.time())).astimezone(pytz.UTC)
 
         if not all([customer_name, mobile, followup_date]):
+            if is_api_request:
+                return jsonify({'success': False, 'error': 'All required fields must be filled'}), 400
             flash('All required fields must be filled', 'error')
             return redirect(url_for('index'))
 
         # Normalize mobile number
         normalized_mobile = normalize_mobile_number(mobile)
         if not normalized_mobile:
+            if is_api_request:
+                return jsonify({'success': False, 'error': 'Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111'}), 400
             flash('Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111', 'error')
             return redirect(url_for('index'))
         mobile = normalized_mobile
@@ -1049,12 +1063,19 @@ def add_lead():
         # Clear any cached queries to ensure dashboard gets fresh data
         db.session.expire_all()
         
+        if is_api_request:
+            return jsonify({'success': True, 'message': 'Lead added successfully!', 'lead_id': new_lead.id}), 200
+        
         flash('Lead added successfully!', 'success')
     except Exception as e:
         db.session.rollback()
+        error_msg = f'Error adding lead: {str(e)}'
+        print(error_msg)
+        if is_api_request:
+            return jsonify({'success': False, 'error': 'Error adding lead. Please try again.'}), 500
         flash('Error adding lead. Please try again.', 'error')
-        print(f"Error adding lead: {str(e)}")
     
+    # For non-API requests (old template), return redirect
     return redirect(url_for('index'))
 
 @application.route('/edit_lead/<int:lead_id>', methods=['GET', 'POST'])
@@ -2795,7 +2816,7 @@ def api_admin_unassigned_leads():
         # Get recent leads
         unassigned_leads = query.order_by(UnassignedLead.created_at.desc()).limit(100).all()
         
-        # Convert to JSON
+        # Convert to JSON and collect assignment info
         leads = []
         for lead in unassigned_leads:
             # Get current assignment if any
@@ -2805,10 +2826,16 @@ def api_admin_unassigned_leads():
             
             assigned_to = None
             added_to_crm = False
+            assigned_date = None
+            assignment_id = None
             if current_assignment:
                 assigned_user = User.query.get(current_assignment.assigned_to_user_id)
                 assigned_to = assigned_user.name if assigned_user else None
                 added_to_crm = current_assignment.added_to_crm or False
+                assignment_id = current_assignment.id
+                # Format assigned_date in IST
+                if current_assignment.assigned_date:
+                    assigned_date = current_assignment.assigned_date.strftime('%Y-%m-%d')
             
             # Combine manufacturer and model for display
             combined_car_model = None
@@ -2819,6 +2846,16 @@ def api_admin_unassigned_leads():
             elif lead.car_model:
                 combined_car_model = lead.car_model
             
+            # Format scheduled_date in IST
+            scheduled_date_str = None
+            if lead.scheduled_date:
+                scheduled_date = lead.scheduled_date
+                if scheduled_date.tzinfo is not None:
+                    scheduled_date_ist = scheduled_date.astimezone(ist)
+                else:
+                    scheduled_date_ist = ist.localize(scheduled_date)
+                scheduled_date_str = scheduled_date_ist.strftime('%Y-%m-%d')
+            
             leads.append({
                 'id': lead.id,
                 'mobile': lead.mobile,
@@ -2826,18 +2863,142 @@ def api_admin_unassigned_leads():
                 'car_model': combined_car_model or '',  # Combined manufacturer and model
                 'pickup_type': lead.pickup_type or '',
                 'service_type': lead.service_type or '',
-                'scheduled_date': lead.scheduled_date.isoformat() if lead.scheduled_date else None,
+                'scheduled_date': scheduled_date_str,
                 'source': lead.source or '',
                 'remarks': lead.remarks or '',
                 'created_at': lead.created_at.isoformat() if lead.created_at else None,
                 'assigned_to': assigned_to,
-                'added_to_crm': added_to_crm  # Track if lead has been added to CRM
+                'added_to_crm': added_to_crm,  # Track if lead has been added to CRM
+                'assigned_date': assigned_date,
+                'assignment_id': assignment_id
             })
+        
+        # Sort leads: pending (not added_to_crm) first, then added_to_crm, then no assignment
+        # Within each group, sort by created_at desc (most recent first)
+        leads.sort(key=lambda x: (
+            0 if x.get('added_to_crm') is False else (1 if x.get('added_to_crm') is True else 2),
+            -1 if x.get('created_at') else 0  # Most recent first (negative for desc)
+        ))
+        # Reverse the created_at comparison since we want desc
+        leads.sort(key=lambda x: (
+            0 if x.get('added_to_crm') is False else (1 if x.get('added_to_crm') is True else 2)
+        ))
+        # Then sort by created_at desc within each group
+        pending_leads = [l for l in leads if l.get('added_to_crm') is False]
+        added_leads = [l for l in leads if l.get('added_to_crm') is True]
+        unassigned_leads_list = [l for l in leads if l.get('added_to_crm') is None or l.get('added_to_crm') is not False and l.get('added_to_crm') is not True]
+        
+        # Sort each group by created_at desc
+        pending_leads.sort(key=lambda x: x.get('created_at') or '', reverse=True)
+        added_leads.sort(key=lambda x: x.get('created_at') or '', reverse=True)
+        unassigned_leads_list.sort(key=lambda x: x.get('created_at') or '', reverse=True)
+        
+        # Combine: pending first, then added, then unassigned
+        leads = pending_leads + added_leads + unassigned_leads_list
         
         return jsonify({'leads': leads})
         
     except Exception as e:
         print(f"Error in api_admin_unassigned_leads: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/admin/unassigned-leads/<int:lead_id>/details', methods=['GET'])
+@login_required
+def api_admin_unassigned_lead_details(lead_id):
+    """Get detailed information about an unassigned lead including CRM details if added"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        # Get the unassigned lead
+        lead = UnassignedLead.query.get_or_404(lead_id)
+        
+        # Get current assignment
+        current_assignment = TeamAssignment.query.filter_by(
+            unassigned_lead_id=lead.id
+        ).order_by(TeamAssignment.assigned_at.desc()).first()
+        
+        # Format scheduled_date in IST
+        scheduled_date_str = None
+        if lead.scheduled_date:
+            scheduled_date = lead.scheduled_date
+            if scheduled_date.tzinfo is not None:
+                scheduled_date_ist = scheduled_date.astimezone(ist)
+            else:
+                scheduled_date_ist = ist.localize(scheduled_date)
+            scheduled_date_str = scheduled_date_ist.strftime('%Y-%m-%d')
+        
+        # Get CRM lead details if added to CRM
+        crm_lead = None
+        if current_assignment and current_assignment.added_to_crm:
+            # Find the CRM lead created from this assignment
+            # We can match by mobile number and creator (the assigned user)
+            crm_leads = Lead.query.filter_by(
+                mobile=lead.mobile,
+                creator_id=current_assignment.assigned_to_user_id
+            ).order_by(Lead.created_at.desc()).all()
+            
+            # Find the most recent one that was likely created from this assignment
+            # (created around the same time as processed_at)
+            if crm_leads:
+                # Get the one closest to processed_at time
+                if current_assignment.processed_at:
+                    closest_lead = min(crm_leads, key=lambda l: abs(
+                        (l.created_at.replace(tzinfo=pytz.UTC) if l.created_at.tzinfo is None else l.created_at) - 
+                        (current_assignment.processed_at.replace(tzinfo=pytz.UTC) if current_assignment.processed_at.tzinfo is None else current_assignment.processed_at)
+                    ))
+                else:
+                    closest_lead = crm_leads[0]
+                
+                # Format followup_date in IST
+                followup_date_str = None
+                if closest_lead.followup_date:
+                    followup_date = closest_lead.followup_date
+                    if followup_date.tzinfo is not None:
+                        followup_date_ist = followup_date.astimezone(ist)
+                    else:
+                        followup_date_ist = pytz.UTC.localize(followup_date).astimezone(ist)
+                    followup_date_str = followup_date_ist.strftime('%Y-%m-%d')
+                
+                crm_lead = {
+                    'id': closest_lead.id,
+                    'status': closest_lead.status,
+                    'car_registration': closest_lead.car_registration or '',
+                    'followup_date': followup_date_str,
+                    'remarks': closest_lead.remarks or '',
+                    'created_at': closest_lead.created_at.isoformat() if closest_lead.created_at else None,
+                    'modified_at': closest_lead.modified_at.isoformat() if closest_lead.modified_at else None
+                }
+        
+        # Format assigned_date in IST
+        assigned_date_str = None
+        if current_assignment and current_assignment.assigned_date:
+            assigned_date_str = current_assignment.assigned_date.strftime('%Y-%m-%d')
+        
+        return jsonify({
+            'lead': {
+                'id': lead.id,
+                'mobile': lead.mobile,
+                'customer_name': lead.customer_name or '',
+                'car_model': f"{lead.car_manufacturer} {lead.car_model}".strip() if lead.car_manufacturer or lead.car_model else '',
+                'pickup_type': lead.pickup_type or '',
+                'service_type': lead.service_type or '',
+                'scheduled_date': scheduled_date_str,
+                'source': lead.source or '',
+                'remarks': lead.remarks or '',
+                'created_at': lead.created_at.isoformat() if lead.created_at else None,
+            },
+            'assignment': {
+                'assigned_to': User.query.get(current_assignment.assigned_to_user_id).name if current_assignment else None,
+                'assigned_date': assigned_date_str,
+                'added_to_crm': current_assignment.added_to_crm if current_assignment else False,
+                'status': current_assignment.status if current_assignment else None,
+            },
+            'crm_lead': crm_lead
+        })
+        
+    except Exception as e:
+        print(f"Error in api_admin_unassigned_lead_details: {e}")
         return jsonify({'error': str(e)}), 500
 
 @application.route('/api/admin/team-members', methods=['GET'])
@@ -3832,39 +3993,46 @@ def edit_unassigned_lead(lead_id):
 def api_team_leads():
     """Get team leads assigned to the current user"""
     try:
-        # Get today's date
-        today = datetime.now(ist).date()
-        
         # Get date filter from query params
         assigned_date_str = request.args.get('assigned_date', '')
         search = request.args.get('search', '')
+        status_filter = request.args.get('status_filter', 'all')  # all, pending, added_to_crm
         
-        # Build query for assignments
-        assignments_query = TeamAssignment.query.join(
+        # Build base query for all assignments (for statistics)
+        base_query = TeamAssignment.query.join(
             UnassignedLead,
             TeamAssignment.unassigned_lead_id == UnassignedLead.id
         ).filter(
             TeamAssignment.assigned_to_user_id == current_user.id
         )
         
-        # Apply date filter
+        # Build filtered query for leads to return
+        assignments_query = base_query
+        
+        # Apply date filter (only if provided)
         if assigned_date_str:
             try:
                 filter_date = datetime.strptime(assigned_date_str, '%Y-%m-%d').date()
                 assignments_query = assignments_query.filter(
                     TeamAssignment.assigned_date == filter_date
                 )
+                base_query = base_query.filter(
+                    TeamAssignment.assigned_date == filter_date
+                )
             except ValueError:
                 pass
-        else:
-            # Default to today if no date specified
-            assignments_query = assignments_query.filter(
-                TeamAssignment.assigned_date == today
-            )
         
         # Apply search filter
         if search:
             assignments_query = assignments_query.filter(
+                db.or_(
+                    UnassignedLead.customer_name.ilike(f'%{search}%'),
+                    UnassignedLead.car_manufacturer.ilike(f'%{search}%'),
+                    UnassignedLead.car_model.ilike(f'%{search}%'),
+                    UnassignedLead.mobile.ilike(f'%{search}%')
+                )
+            )
+            base_query = base_query.filter(
                 db.or_(
                     UnassignedLead.customer_name.ilike(f'%{search}%'),
                     UnassignedLead.car_manufacturer.ilike(f'%{search}%'),
@@ -3877,9 +4045,25 @@ def api_team_leads():
         assignments_query = assignments_query.options(
             db.joinedload(TeamAssignment.unassigned_lead)
         )
+        base_query = base_query.options(
+            db.joinedload(TeamAssignment.unassigned_lead)
+        )
         
-        # Get all assignments
-        assignments = assignments_query.order_by(TeamAssignment.assigned_at.desc()).all()
+        # Get all assignments for statistics (before status filter)
+        all_assignments = base_query.all()
+        
+        # Apply status filter to the query for leads to return
+        if status_filter == 'pending':
+            assignments_query = assignments_query.filter(TeamAssignment.added_to_crm == False)
+        elif status_filter == 'added_to_crm':
+            assignments_query = assignments_query.filter(TeamAssignment.added_to_crm == True)
+        # If status_filter is 'all', no additional filter needed
+        
+        # Get filtered assignments and sort: pending first (not added_to_crm), then added_to_crm, then by assigned_at desc
+        assignments = assignments_query.order_by(
+            TeamAssignment.added_to_crm.asc(),  # False (pending) comes before True (added_to_crm)
+            TeamAssignment.assigned_at.desc()
+        ).all()
         
         # Format response
         leads_data = []
@@ -3898,9 +4082,15 @@ def api_team_leads():
             # Format scheduled date
             scheduled_date_str = ''
             if unassigned_lead.scheduled_date:
-                scheduled_date_ist = unassigned_lead.scheduled_date
-                if scheduled_date_ist.tzinfo is None:
-                    scheduled_date_ist = ist.localize(scheduled_date_ist)
+                scheduled_date = unassigned_lead.scheduled_date
+                # Convert to IST if it has timezone info (likely UTC from database)
+                if scheduled_date.tzinfo is not None:
+                    # Convert from stored timezone (likely UTC) to IST
+                    scheduled_date_ist = scheduled_date.astimezone(ist)
+                else:
+                    # If no timezone, assume it's already in IST (naive datetime)
+                    scheduled_date_ist = ist.localize(scheduled_date)
+                # Extract date in IST timezone
                 scheduled_date_str = scheduled_date_ist.strftime('%Y-%m-%d')
             
             leads_data.append({
@@ -3918,11 +4108,11 @@ def api_team_leads():
                 'assigned_date': assignment.assigned_date.strftime('%Y-%m-%d') if assignment.assigned_date else None
             })
         
-        # Calculate statistics
-        total_assigned = len(leads_data)
-        pending = sum(1 for lead in leads_data if not lead['added_to_crm'])
-        contacted = sum(1 for lead in leads_data if lead['status'] == 'Contacted')
-        added_to_crm = sum(1 for lead in leads_data if lead['added_to_crm'])
+        # Calculate statistics from all assignments (not filtered by status)
+        total_assigned = len(all_assignments)
+        pending = sum(1 for assignment in all_assignments if not assignment.added_to_crm)
+        contacted = sum(1 for assignment in all_assignments if assignment.status == 'Contacted')
+        added_to_crm = sum(1 for assignment in all_assignments if assignment.added_to_crm)
         
         return jsonify({
             'success': True,
