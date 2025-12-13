@@ -727,13 +727,18 @@ def get_initial_followup_count(user_id, date):
     if daily_count:
         return daily_count.initial_count
     else:
-        start_datetime = datetime.combine(date, time.min)
-        end_datetime = datetime.combine(date + timedelta(days=1), time.min)
+        # Use timezone-aware datetime for proper comparison
+        # Create IST datetime range for the date
+        start_datetime_ist = ist.localize(datetime.combine(date, time.min))
+        end_datetime_ist = start_datetime_ist + timedelta(days=1)
+        # Convert to UTC for database query (followup_date is stored in UTC)
+        start_datetime_utc = start_datetime_ist.astimezone(pytz.UTC)
+        end_datetime_utc = end_datetime_ist.astimezone(pytz.UTC)
         
         current_count = Lead.query.filter(
             Lead.creator_id == user_id,
-            Lead.followup_date >= start_datetime,
-            Lead.followup_date < end_datetime
+            Lead.followup_date >= start_datetime_utc,
+            Lead.followup_date < end_datetime_utc
         ).count()
         
         # Create record
@@ -980,15 +985,33 @@ def record_worked_lead(lead_id, user_id, old_followup_date, new_followup_date):
 def get_worked_leads_for_date(user_id, date):
     """
     Get the count of worked leads for a specific user on a specific date.
+    Only counts leads that were part of the initial assignment (old_followup_date was on target date).
+    This ensures completion rate is calculated correctly: worked leads / initial assignment.
     """
     try:
-        worked_count = WorkedLead.query.filter_by(
-            user_id=user_id,
-            work_date=date
+        # Create IST datetime range for the target date
+        date_start_ist = ist.localize(datetime.combine(date, time.min))
+        date_end_ist = date_start_ist + timedelta(days=1)
+        # Convert to UTC for database query (old_followup_date is stored in UTC)
+        date_start_utc = date_start_ist.astimezone(pytz.UTC)
+        date_end_utc = date_end_ist.astimezone(pytz.UTC)
+        
+        # Count only worked leads where:
+        # 1. The work was done on the target date (work_date = date)
+        # 2. The lead's old_followup_date was on the target date (was part of initial assignment)
+        # 3. old_followup_date is not None (exclude leads that didn't have a followup date before)
+        worked_count = WorkedLead.query.filter(
+            WorkedLead.user_id == user_id,
+            WorkedLead.work_date == date,
+            WorkedLead.old_followup_date.isnot(None),
+            WorkedLead.old_followup_date >= date_start_utc,
+            WorkedLead.old_followup_date < date_end_utc
         ).count()
         return worked_count
     except Exception as e:
         print(f"Error getting worked leads count: {e}")
+        import traceback
+        traceback.print_exc()
         return 0
 
 def calculate_completion_rate(initial_count, worked_count):
@@ -1975,7 +1998,9 @@ def api_dashboard_metrics():
             # Non-admin sees only their own data
             base_conditions.append(Lead.creator_id == current_user.id)
         
-        # Today's followups count
+        # Today's followups count - current count of leads with followup_date = target_date
+        # Note: This shows leads that CURRENTLY have today's date, which may be less than
+        # the initial assignment if leads have been worked on and moved to different dates
         todays_followups_query = db.session.query(db.func.count(Lead.id)).filter(
             Lead.followup_date >= target_start_utc,
             Lead.followup_date < target_end_utc
@@ -1994,7 +2019,10 @@ def api_dashboard_metrics():
             pending_query = pending_query.filter(*base_conditions)
         pending_followups = pending_query.scalar() or 0
         
-        # Initial assignment (from daily snapshot)
+        # Initial assignment (from daily snapshot taken at 5AM IST)
+        # This is a fixed snapshot of how many leads were scheduled for this date at the start of the day
+        # The difference between initial_assignment and todays_followups represents leads that have been
+        # worked on and had their followup_date changed to a different date
         if filter_user_id:
             # Filter by specific user
             users = User.query.filter_by(id=filter_user_id).all()
