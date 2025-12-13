@@ -447,6 +447,18 @@ class WhatsAppTemplate(db.Model):
     
     creator = db.relationship('User', backref='whatsapp_templates')
 
+class CustomerNameCounter(db.Model):
+    """
+    Global counter for generating default customer names.
+    Stores a single row with the current counter value.
+    Ensures unique sequential customer names across all users and sessions.
+    """
+    __tablename__ = 'customer_name_counter'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    counter = db.Column(db.Integer, nullable=False, default=0)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -1165,6 +1177,11 @@ def parse_customer_text_api():
         # Parse the text
         parsed_info = parse_customer_text(text)
         
+        # If customer name is missing, get the next default customer name from database
+        if not parsed_info.get('customer_name') or not parsed_info['customer_name'].strip():
+            default_name = get_next_default_customer_name()
+            parsed_info['customer_name'] = default_name
+        
         # Return the parsed information
         return jsonify({
             'success': True,
@@ -1175,6 +1192,62 @@ def parse_customer_text_api():
     except Exception as e:
         print(f"Error parsing customer text: {e}")
         return jsonify({'success': False, 'message': f'Error parsing text: {str(e)}'})
+
+@application.route('/api/customer-name/next', methods=['GET'])
+@login_required
+def get_next_customer_name():
+    """Get the next default customer name with atomic counter increment"""
+    try:
+        # Check if user is admin
+        if not current_user.is_admin:
+            return jsonify({'success': False, 'message': 'Access denied. Admin privileges required.'}), 403
+        
+        default_name = get_next_default_customer_name()
+        
+        return jsonify({
+            'success': True,
+            'customer_name': default_name,
+            'message': 'Next customer name generated successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error getting next customer name: {e}")
+        return jsonify({'success': False, 'message': f'Error generating customer name: {str(e)}'})
+
+def get_next_default_customer_name():
+    """
+    Atomically increment the customer name counter and return the next default name.
+    Uses database-level locking to ensure thread-safety across multiple users.
+    """
+    try:
+        # Use a transaction with row-level locking to ensure atomicity
+        # This prevents race conditions when multiple users request names simultaneously
+        # with_for_update() locks the row until the transaction completes
+        counter_row = CustomerNameCounter.query.with_for_update().first()
+        
+        if not counter_row:
+            # First time - create the counter row
+            counter_row = CustomerNameCounter(counter=0)
+            db.session.add(counter_row)
+            db.session.flush()  # Flush to get the ID
+        
+        # Increment the counter atomically
+        counter_row.counter += 1
+        counter_row.updated_at = datetime.now(ist)
+        
+        # Get the new counter value
+        new_counter = counter_row.counter
+        
+        # Commit the transaction
+        db.session.commit()
+        
+        return f"Customer {new_counter}"
+            
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in get_next_default_customer_name: {e}")
+        # Fallback: use timestamp if database fails
+        return f"Customer {int(datetime.now().timestamp())}"
 
 @application.route('/api/user-followup-numbers/<int:user_id>', methods=['GET'])
 @login_required
@@ -4280,6 +4353,13 @@ def init_database():
                     )
                     new_user.set_password(user_data['password'])  # Use set_password to hash it properly
                     db.session.add(new_user)
+            
+            # Initialize customer name counter if it doesn't exist
+            counter = CustomerNameCounter.query.first()
+            if not counter:
+                counter = CustomerNameCounter(counter=0)
+                db.session.add(counter)
+                print("✅ Customer name counter initialized")
             
             db.session.commit()
             print("Database initialized successfully")

@@ -282,9 +282,10 @@ class CustomerInfoParser:
                                 if valid_model.lower() in model.lower():
                                     result['model'] = valid_model.title()
                                     break
-                if not result['model']:
-                    result['model'] = model.strip().title()
-                break
+                    # If no valid model found or no manufacturer, use the extracted model
+                    if not result['model']:
+                        result['model'] = model.strip().title()
+                    break
         
         # If no explicit manufacturer found, try to infer from context
         if not result['manufacturer']:
