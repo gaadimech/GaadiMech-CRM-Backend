@@ -2345,6 +2345,53 @@ def api_followups():
         print(f"Error in api_followups: {e}")
         return jsonify({'error': str(e)}), 500
 
+@application.route('/api/followups/<int:lead_id>', methods=['GET'])
+@login_required
+def api_get_followup(lead_id):
+    """Get a single followup/lead by ID"""
+    try:
+        lead = Lead.query.get_or_404(lead_id)
+        
+        # Check permissions
+        if not current_user.is_admin and lead.creator_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Permission denied'}), 403
+        
+        creator_name = lead.creator.name if lead.creator else 'Unknown'
+        
+        # Ensure followup_date is timezone-aware before converting to ISO
+        followup_date_iso = None
+        if lead.followup_date:
+            # If naive, assume it's UTC and localize it
+            if lead.followup_date.tzinfo is None:
+                followup_date_aware = pytz.UTC.localize(lead.followup_date)
+            else:
+                followup_date_aware = lead.followup_date
+            followup_date_iso = followup_date_aware.isoformat()
+        
+        lead_data = {
+            'id': lead.id,
+            'customer_name': lead.customer_name,
+            'mobile': lead.mobile,
+            'car_registration': lead.car_registration or '',
+            'car_model': lead.car_model or '',
+            'followup_date': followup_date_iso,
+            'status': lead.status,
+            'remarks': lead.remarks or '',
+            'creator_id': lead.creator_id,
+            'creator_name': creator_name,
+            'created_at': lead.created_at.isoformat() if lead.created_at else None,
+            'modified_at': lead.modified_at.isoformat() if lead.modified_at else None
+        }
+        
+        return jsonify({
+            'success': True,
+            'lead': lead_data
+        })
+        
+    except Exception as e:
+        print(f"Error fetching followup: {e}")
+        return jsonify({'success': False, 'message': 'Error fetching followup'}), 500
+
 @application.route('/api/followups/<int:lead_id>', methods=['PATCH'])
 @login_required
 def api_update_followup(lead_id):
@@ -4339,6 +4386,27 @@ def api_team_leads():
                 # Extract date in IST timezone
                 scheduled_date_str = scheduled_date_ist.strftime('%Y-%m-%d')
             
+            # Find the CRM lead ID if this assignment was added to CRM
+            lead_id = None
+            if assignment.added_to_crm:
+                # Find the Lead created from this assignment
+                # Match by mobile number and creator (the assigned user)
+                crm_leads = Lead.query.filter_by(
+                    mobile=unassigned_lead.mobile,
+                    creator_id=assignment.assigned_to_user_id
+                ).order_by(Lead.created_at.desc()).all()
+                
+                # Find the one closest to processed_at time
+                if crm_leads and assignment.processed_at:
+                    closest_lead = min(crm_leads, key=lambda l: abs(
+                        (l.created_at.replace(tzinfo=pytz.UTC) if l.created_at.tzinfo is None else l.created_at) - 
+                        (assignment.processed_at.replace(tzinfo=pytz.UTC) if assignment.processed_at.tzinfo is None else assignment.processed_at)
+                    ))
+                    lead_id = closest_lead.id
+                elif crm_leads:
+                    # If no processed_at, just get the most recent one
+                    lead_id = crm_leads[0].id
+            
             leads_data.append({
                 'assignment_id': assignment.id,
                 'customer_name': unassigned_lead.customer_name or 'Unknown Customer',
@@ -4350,6 +4418,7 @@ def api_team_leads():
                 'source': unassigned_lead.source or '',
                 'status': assignment.status,
                 'added_to_crm': assignment.added_to_crm,
+                'lead_id': lead_id,  # Include lead_id when added to CRM
                 'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
                 'assigned_date': assignment.assigned_date.strftime('%Y-%m-%d') if assignment.assigned_date else None
             })
