@@ -200,26 +200,28 @@ def normalize_mobile_number(mobile):
     2. XXXXXXXXXX (10 digits)
     3. 91XXXXXXXXXX (12 digits: 91 + 10 digits)
     
-    Returns normalized mobile number (10 digits) or None if invalid
+    Returns normalized mobile number (10 digits) or None if invalid.
+    Accepts any 10-digit number to support old leads that may not follow
+    the standard Indian mobile number format (starting with 6-9).
     """
     if not mobile:
         return None
     
     # Remove all non-digit characters except +
-    cleaned = re.sub(r'[^\d+]', '', mobile)
+    cleaned = re.sub(r'[^\d+]', '', str(mobile))
     
     # Handle +91 format
     if cleaned.startswith('+91'):
         digits = cleaned[3:]  # Remove +91
-        if len(digits) == 10 and digits[0] in ['6', '7', '8', '9']:
+        if len(digits) == 10:
             return digits
     # Handle 91XXXXXXXXXX format
     elif cleaned.startswith('91'):
         digits = cleaned[2:]  # Remove 91
-        if len(digits) == 10 and digits[0] in ['6', '7', '8', '9']:
+        if len(digits) == 10:
             return digits
     # Handle XXXXXXXXXX format (10 digits)
-    elif len(cleaned) == 10 and cleaned[0] in ['6', '7', '8', '9']:
+    elif len(cleaned) == 10:
         return cleaned
     
     return None
@@ -1117,7 +1119,14 @@ def edit_lead(lead_id):
             old_followup_date = lead.followup_date
             
             lead.customer_name = request.form.get('customer_name')
-            lead.mobile = request.form.get('mobile')
+            # Normalize mobile number
+            mobile = request.form.get('mobile')
+            if mobile:
+                normalized_mobile = normalize_mobile_number(mobile)
+                if not normalized_mobile:
+                    flash('Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111', 'error')
+                    return render_template('edit_lead.html', lead=lead)
+                lead.mobile = normalized_mobile
             lead.car_registration = request.form.get('car_registration')
             lead.car_model = request.form.get('car_model')
             lead.remarks = request.form.get('remarks')
@@ -1805,7 +1814,12 @@ def update_followup():
         
         # Update lead details
         lead.customer_name = customer_name
-        lead.mobile = mobile
+        # Normalize mobile number
+        if mobile:
+            normalized_mobile = normalize_mobile_number(mobile)
+            if not normalized_mobile:
+                return jsonify({'success': False, 'message': 'Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111'}), 400
+            lead.mobile = normalized_mobile
         lead.car_registration = car_registration
         
         # Update followup date
@@ -3052,6 +3066,201 @@ def api_admin_team_members():
         print(f"Error in api_admin_team_members: {e}")
         return jsonify({'error': str(e)}), 500
 
+@application.route('/api/admin/download-leads/count', methods=['GET'])
+@login_required
+def api_admin_download_leads_count():
+    """Get count of leads matching filter criteria"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        # Get query parameters
+        filter_type = request.args.get('filter_type', 'followup_date')  # 'created_date', 'followup_date', or 'date_range'
+        date = request.args.get('date', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
+        user_ids = request.args.getlist('user_ids')  # Can be multiple user IDs
+        
+        # Build base query
+        query = Lead.query
+        
+        # Apply date filters
+        if filter_type == 'created_date' and date:
+            try:
+                target_date = datetime.strptime(date, '%Y-%m-%d').date()
+                target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
+                target_end = target_start + timedelta(days=1)
+                target_start_utc = target_start.astimezone(pytz.UTC)
+                target_end_utc = target_end.astimezone(pytz.UTC)
+                query = query.filter(
+                    Lead.created_at >= target_start_utc,
+                    Lead.created_at < target_end_utc
+                )
+            except ValueError:
+                pass
+        elif filter_type == 'followup_date' and date:
+            try:
+                target_date = datetime.strptime(date, '%Y-%m-%d').date()
+                target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
+                target_end = target_start + timedelta(days=1)
+                target_start_utc = target_start.astimezone(pytz.UTC)
+                target_end_utc = target_end.astimezone(pytz.UTC)
+                query = query.filter(
+                    Lead.followup_date >= target_start_utc,
+                    Lead.followup_date < target_end_utc
+                )
+            except ValueError:
+                pass
+        elif filter_type == 'date_range' and start_date and end_date:
+            try:
+                start = datetime.strptime(start_date, '%Y-%m-%d').date()
+                end = datetime.strptime(end_date, '%Y-%m-%d').date()
+                # For date range, we'll filter by followup_date by default
+                # But we can make it configurable if needed
+                start_ist = ist.localize(datetime.combine(start, datetime.min.time()))
+                end_ist = ist.localize(datetime.combine(end, datetime.min.time())) + timedelta(days=1)
+                start_utc = start_ist.astimezone(pytz.UTC)
+                end_utc = end_ist.astimezone(pytz.UTC)
+                query = query.filter(
+                    Lead.followup_date >= start_utc,
+                    Lead.followup_date < end_utc
+                )
+            except ValueError:
+                pass
+        
+        # Apply user filter
+        if user_ids:
+            try:
+                user_id_list = [int(uid) for uid in user_ids if uid]
+                if user_id_list:
+                    query = query.filter(Lead.creator_id.in_(user_id_list))
+            except ValueError:
+                pass
+        
+        # Get count
+        count = query.count()
+        
+        return jsonify({
+            'success': True,
+            'count': count
+        })
+        
+    except Exception as e:
+        print(f"Error in api_admin_download_leads_count: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/admin/download-leads/export', methods=['GET'])
+@login_required
+def api_admin_download_leads_export():
+    """Export leads as CSV with phone_number header"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        # Get query parameters
+        filter_type = request.args.get('filter_type', 'followup_date')  # 'created_date', 'followup_date', or 'date_range'
+        date = request.args.get('date', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
+        user_ids = request.args.getlist('user_ids')  # Can be multiple user IDs
+        
+        # Build base query
+        query = Lead.query
+        
+        # Apply date filters
+        if filter_type == 'created_date' and date:
+            try:
+                target_date = datetime.strptime(date, '%Y-%m-%d').date()
+                target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
+                target_end = target_start + timedelta(days=1)
+                target_start_utc = target_start.astimezone(pytz.UTC)
+                target_end_utc = target_end.astimezone(pytz.UTC)
+                query = query.filter(
+                    Lead.created_at >= target_start_utc,
+                    Lead.created_at < target_end_utc
+                )
+            except ValueError:
+                pass
+        elif filter_type == 'followup_date' and date:
+            try:
+                target_date = datetime.strptime(date, '%Y-%m-%d').date()
+                target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
+                target_end = target_start + timedelta(days=1)
+                target_start_utc = target_start.astimezone(pytz.UTC)
+                target_end_utc = target_end.astimezone(pytz.UTC)
+                query = query.filter(
+                    Lead.followup_date >= target_start_utc,
+                    Lead.followup_date < target_end_utc
+                )
+            except ValueError:
+                pass
+        elif filter_type == 'date_range' and start_date and end_date:
+            try:
+                start = datetime.strptime(start_date, '%Y-%m-%d').date()
+                end = datetime.strptime(end_date, '%Y-%m-%d').date()
+                # For date range, we'll filter by followup_date by default
+                start_ist = ist.localize(datetime.combine(start, datetime.min.time()))
+                end_ist = ist.localize(datetime.combine(end, datetime.min.time())) + timedelta(days=1)
+                start_utc = start_ist.astimezone(pytz.UTC)
+                end_utc = end_ist.astimezone(pytz.UTC)
+                query = query.filter(
+                    Lead.followup_date >= start_utc,
+                    Lead.followup_date < end_utc
+                )
+            except ValueError:
+                pass
+        
+        # Apply user filter
+        if user_ids:
+            try:
+                user_id_list = [int(uid) for uid in user_ids if uid]
+                if user_id_list:
+                    query = query.filter(Lead.creator_id.in_(user_id_list))
+            except ValueError:
+                pass
+        
+        # Get leads
+        leads = query.order_by(Lead.created_at.desc()).all()
+        
+        # Prepare CSV data with phone_number header
+        csv_header = 'phone_number\n'
+        csv_data = csv_header
+        
+        # Extract unique phone numbers (in case of duplicates)
+        phone_numbers = set()
+        for lead in leads:
+            if lead.mobile:
+                phone_numbers.add(lead.mobile)
+        
+        # Add phone numbers to CSV
+        for phone in sorted(phone_numbers):
+            csv_data += f"{phone}\n"
+        
+        # Generate filename based on filter type
+        if filter_type == 'followup_date' and date:
+            filename = f"FD-{date}.csv"
+        elif filter_type == 'created_date' and date:
+            filename = f"CD-{date}.csv"
+        elif filter_type == 'date_range' and start_date and end_date:
+            filename = f"DR-{start_date}_to_{end_date}.csv"
+        else:
+            filename = "leads.csv"
+        
+        # Return response
+        response = make_response(csv_data)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error in api_admin_download_leads_export: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'message': 'Failed to export leads'}), 500
+
 @application.route('/api/admin/users', methods=['GET', 'POST'])
 @login_required
 def get_all_users():
@@ -3905,7 +4114,16 @@ def edit_unassigned_lead(lead_id):
         if request.method == 'POST':
             # Update lead details - convert empty strings to None for database constraints
             lead.customer_name = request.form.get('customer_name').strip() if request.form.get('customer_name') else None
-            lead.mobile = request.form.get('mobile')
+            # Normalize mobile number
+            mobile = request.form.get('mobile')
+            if mobile:
+                normalized_mobile = normalize_mobile_number(mobile)
+                if not normalized_mobile:
+                    flash('Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111', 'error')
+                    return render_template('edit_unassigned_lead.html', lead=lead)
+                lead.mobile = normalized_mobile
+            else:
+                lead.mobile = None
             lead.car_manufacturer = request.form.get('car_manufacturer').strip() if request.form.get('car_manufacturer') else None
             lead.car_model = request.form.get('car_model').strip() if request.form.get('car_model') else None
             lead.pickup_type = request.form.get('pickup_type').strip() if request.form.get('pickup_type') else None
