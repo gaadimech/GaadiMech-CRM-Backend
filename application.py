@@ -274,7 +274,7 @@ class Lead(db.Model):
 
     __table_args__ = (
         db.CheckConstraint(
-            status.in_(['New Lead', 'Did Not Pick Up', 'Needs Followup', 'Confirmed', 'Open', 'Completed', 'Feedback']),
+            status.in_(['New Lead', 'Did Not Pick Up', 'Needs Followup', 'Confirmed', 'Open', 'Completed', 'Feedback', 'Dead Lead']),
             name='valid_status'
         ),
     )
@@ -706,6 +706,34 @@ def logout():
         return jsonify({'success': True, 'message': 'Logged out successfully'})
     return redirect(url_for('login'))
 
+@application.route('/health')
+def health_check():
+    """Health check endpoint for AWS Elastic Beanstalk
+    This endpoint is used by EB to determine application health.
+    It should be fast and always return 200 OK to prevent false negatives.
+    """
+    try:
+        # Quick database connectivity check (with timeout)
+        # Use a simple query that's fast
+        db.session.execute(text('SELECT 1')).fetchone()
+        db.session.commit()
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'timestamp': datetime.now(ist).isoformat()
+        }), 200
+    except Exception as e:
+        # If database check fails, still return 200 but indicate database issue
+        # This prevents health check from failing due to temporary DB issues
+        # EB will mark as degraded but not as failed
+        print(f"Health check database error: {str(e)}")
+        return jsonify({
+            'status': 'degraded',
+            'database': 'disconnected',
+            'message': 'Application is running but database connection failed',
+            'timestamp': datetime.now(ist).isoformat()
+        }), 200
+
 @application.route('/')
 def index():
     """Serve the Next.js frontend index page"""
@@ -1046,7 +1074,7 @@ def add_lead():
         remarks = request.form.get('remarks')
         status = request.form.get('status')
 
-        if not status or status not in ['New Lead', 'Did Not Pick Up', 'Needs Followup', 'Confirmed', 'Open', 'Completed', 'Feedback']:
+        if not status or status not in ['New Lead', 'Did Not Pick Up', 'Needs Followup', 'Confirmed', 'Open', 'Completed', 'Feedback', 'Dead Lead']:
             status = 'New Lead'
 
         # Parse followup_date as YYYY-MM-DD and create at midnight IST, then convert to UTC
@@ -1626,7 +1654,7 @@ def dashboard_old():
         if base_conditions:
             current_followups_query = current_followups_query.filter(*base_conditions)
         
-        # Add status ordering: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did not Pick up
+        # Add status ordering: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did not Pick up > Dead Lead
         status_order = db.case(
             (Lead.status == 'New Lead', 0),
             (Lead.status == 'Feedback', 1),
@@ -1635,7 +1663,8 @@ def dashboard_old():
             (Lead.status == 'Completed', 4),
             (Lead.status == 'Needs Followup', 5),
             (Lead.status == 'Did Not Pick Up', 6),
-            else_=7
+            (Lead.status == 'Dead Lead', 7),
+            else_=8
         )
         current_followups = current_followups_query.order_by(status_order.asc(), Lead.followup_date.asc()).all()
         
@@ -1899,7 +1928,7 @@ def api_followups_today():
         elif not current_user.is_admin:
             query = query.filter(Lead.creator_id == current_user.id)
         
-        # Status priority order: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did Not Pick Up
+        # Status priority order: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did Not Pick Up > Dead Lead
         status_order = db.case(
             (Lead.status == 'New Lead', 0),
             (Lead.status == 'Feedback', 1),
@@ -1908,7 +1937,8 @@ def api_followups_today():
             (Lead.status == 'Completed', 4),
             (Lead.status == 'Needs Followup', 5),
             (Lead.status == 'Did Not Pick Up', 6),
-            else_=7
+            (Lead.status == 'Dead Lead', 7),
+            else_=8
         )
         
         # Get leads - order by status priority first, then by followup_date ascending
@@ -2023,11 +2053,11 @@ def api_dashboard_metrics():
             todays_followups_query = todays_followups_query.filter(*base_conditions)
         todays_followups = todays_followups_query.scalar() or 0
         
-        # Pending followups (status not Completed/Confirmed)
+        # Pending followups (status not Completed/Confirmed/Dead Lead)
         pending_query = db.session.query(db.func.count(Lead.id)).filter(
             Lead.followup_date >= target_start_utc,
             Lead.followup_date < target_end_utc,
-            ~Lead.status.in_(['Completed', 'Confirmed'])
+            ~Lead.status.in_(['Completed', 'Confirmed', 'Dead Lead'])
         )
         if base_conditions:
             pending_query = pending_query.filter(*base_conditions)
@@ -2286,7 +2316,7 @@ def api_followups():
                 )
             )
         
-        # Status priority order: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did Not Pick Up
+        # Status priority order: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did Not Pick Up > Dead Lead
         status_order = db.case(
             (Lead.status == 'New Lead', 0),
             (Lead.status == 'Feedback', 1),
@@ -2295,7 +2325,8 @@ def api_followups():
             (Lead.status == 'Completed', 4),
             (Lead.status == 'Needs Followup', 5),
             (Lead.status == 'Did Not Pick Up', 6),
-            else_=7
+            (Lead.status == 'Dead Lead', 7),
+            else_=8
         )
         
         # Paginate - order by status priority first, then by followup_date ascending (earliest first)

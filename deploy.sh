@@ -92,16 +92,58 @@ echo -e "${GREEN}📦 Deploying application...${NC}"
 eb deploy
 
 echo ""
-echo -e "${GREEN}✅ Deployment complete!${NC}"
+echo -e "${GREEN}✅ Deployment initiated!${NC}"
+echo ""
+echo -e "${YELLOW}⏳ Waiting 30 seconds for deployment to stabilize...${NC}"
+sleep 30
+
+echo ""
+echo -e "${GREEN}📋 Checking deployment status...${NC}"
+eb status
+
+echo ""
+echo -e "${YELLOW}⏳ Waiting additional 30 seconds before checking logs...${NC}"
+sleep 30
+
+echo ""
+echo -e "${GREEN}📊 Fetching recent logs...${NC}"
+echo "=========================================="
+eb logs --all | tail -n 100
+echo "=========================================="
+
+echo ""
+echo -e "${GREEN}🏥 Checking health status...${NC}"
+eb health --refresh
+
+echo ""
+echo -e "${GREEN}🔍 Checking application health endpoint...${NC}"
+APP_URL=$(eb status | grep "CNAME" | awk '{print $2}' | head -n 1)
+if [ -n "$APP_URL" ]; then
+    echo "Testing health endpoint: http://${APP_URL}/health"
+    HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "http://${APP_URL}/health" || echo "000")
+    if [ "$HEALTH_RESPONSE" = "200" ]; then
+        echo -e "${GREEN}✅ Health endpoint responding (HTTP 200)${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Health endpoint returned HTTP ${HEALTH_RESPONSE}${NC}"
+        echo "This might be normal if the application is still starting up."
+    fi
+else
+    echo -e "${YELLOW}⚠️  Could not determine application URL${NC}"
+fi
+
+echo ""
+echo -e "${GREEN}✅ Deployment verification complete!${NC}"
 echo ""
 echo "Next steps:"
-echo "1. Check logs: eb logs"
-echo "2. Open application: eb open"
-echo "3. Check status: eb status"
-echo "4. Test API endpoints"
+echo "1. Check detailed logs: eb logs --all"
+echo "2. Stream logs in real-time: eb logs --stream"
+echo "3. Open application: eb open"
+echo "4. Check status: eb status"
+echo "5. Test API endpoints"
 echo ""
 echo -e "${YELLOW}⚠️  Don't forget to:${NC}"
 echo "- Verify RDS security group allows connections from EB"
 echo "- Run database migrations if needed: eb ssh (then flask db upgrade)"
 echo "- Update EB_ORIGIN after frontend deployment"
+echo "- Monitor health status: eb health --refresh"
 
