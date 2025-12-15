@@ -8,6 +8,7 @@ from urllib.parse import quote_plus
 import re
 import os
 import sys
+import time as time_module
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address   
@@ -480,6 +481,101 @@ class CustomerNameCounter(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     counter = db.Column(db.Integer, nullable=False, default=0)
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+
+class TeleobiTemplateCache(db.Model):
+    """
+    Cache for Teleobi WhatsApp templates to avoid frequent API calls.
+    Stores template metadata including type (Utility/Marketing) and status.
+    """
+    __tablename__ = 'teleobi_template_cache'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.String(100), nullable=False, unique=True)  # WhatsApp template ID
+    teleobi_template_id = db.Column(db.String(50), nullable=True)  # Teleobi internal template ID (for sending)
+    template_name = db.Column(db.String(200), nullable=False)
+    template_type = db.Column(db.String(20), nullable=False)  # 'utility' or 'marketing'
+    status = db.Column(db.String(50), nullable=False)  # 'Approved', 'Pending', 'Rejected'
+    category = db.Column(db.String(50), nullable=True)  # 'transactional', 'marketing', etc.
+    language = db.Column(db.String(10), default='en_US')
+    variables = db.Column(db.JSON, nullable=True)  # Template variable structure
+    template_json = db.Column(db.Text, nullable=True)  # Full template JSON
+    whatsapp_business_id = db.Column(db.Integer, nullable=True)  # WhatsApp Business ID (per template, for message status API)
+    phone_number_id = db.Column(db.String(100), nullable=False)
+    synced_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    
+    __table_args__ = (
+        db.Index('idx_template_type', 'template_type'),
+        db.Index('idx_template_status', 'status'),
+        db.Index('idx_template_synced', 'synced_at'),
+    )
+
+class WhatsAppSend(db.Model):
+    """
+    Track all WhatsApp template messages sent via Teleobi API.
+    Used for monitoring, quality tracking, and delivery status.
+    """
+    __tablename__ = 'whatsapp_send'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=True)
+    phone_number = db.Column(db.String(20), nullable=False)
+    template_id = db.Column(db.String(100), nullable=True)
+    template_name = db.Column(db.String(200), nullable=False)
+    template_type = db.Column(db.String(20), nullable=True)  # 'utility' or 'marketing'
+    variables = db.Column(db.JSON, nullable=True)  # Template variables used
+    wa_message_id = db.Column(db.String(200), nullable=True)  # WhatsApp message ID from API
+    status = db.Column(db.String(50), nullable=False, default='pending')  # 'pending', 'sent', 'delivered', 'read', 'failed'
+    sent_at = db.Column(db.DateTime, nullable=True)
+    delivered_at = db.Column(db.DateTime, nullable=True)
+    read_at = db.Column(db.DateTime, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    retry_count = db.Column(db.Integer, default=0)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+    
+    # Relationships
+    lead = db.relationship('Lead', backref='whatsapp_sends')
+    creator = db.relationship('User', backref='whatsapp_sends')
+    
+    __table_args__ = (
+        db.Index('idx_whatsapp_send_status', 'status'),
+        db.Index('idx_whatsapp_send_phone', 'phone_number'),
+        db.Index('idx_whatsapp_send_template', 'template_name'),
+        db.Index('idx_whatsapp_send_created', 'created_at'),
+        db.Index('idx_whatsapp_send_wa_id', 'wa_message_id'),
+    )
+
+class WhatsAppBulkJob(db.Model):
+    """
+    Track bulk messaging jobs for monitoring and management.
+    """
+    __tablename__ = 'whatsapp_bulk_job'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    job_name = db.Column(db.String(200), nullable=True)
+    template_name = db.Column(db.String(200), nullable=False)
+    total_recipients = db.Column(db.Integer, nullable=False, default=0)
+    processed_count = db.Column(db.Integer, default=0)  # Messages processed so far
+    sent_count = db.Column(db.Integer, default=0)
+    delivered_count = db.Column(db.Integer, default=0)
+    read_count = db.Column(db.Integer, default=0)  # Messages read/opened
+    failed_count = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(50), nullable=False, default='pending')  # 'pending', 'processing', 'completed', 'failed', 'cancelled'
+    filter_criteria = db.Column(db.JSON, nullable=True)  # Store filter criteria used
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+    
+    creator = db.relationship('User', backref='whatsapp_bulk_jobs')
+    
+    __table_args__ = (
+        db.Index('idx_bulk_job_status', 'status'),
+        db.Index('idx_bulk_job_created', 'created_at'),
+    )
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -5507,6 +5603,1238 @@ def api_push_debug_user_by_username():
         })
     except Exception as e:
         print(f"Error in api_push_debug_user_by_username: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# WhatsApp Bulk Messaging API Endpoints (Enterprise-Grade)
+# ============================================================================
+
+# Import Teleobi client
+try:
+    from teleobi_client import TeleobiClient, TemplateType, SendResult
+except ImportError:
+    print("Warning: teleobi_client not found. WhatsApp bulk messaging will not work.")
+    TeleobiClient = None
+
+# Global Teleobi client instance (initialized on first use)
+_teleobi_client = None
+
+def get_teleobi_client():
+    """Get or create Teleobi client instance"""
+    global _teleobi_client
+    if _teleobi_client is None and TeleobiClient:
+        try:
+            tier = int(os.getenv('TELEOBI_TIER', '1'))  # Default to tier 1 for safety
+            _teleobi_client = TeleobiClient(tier=tier)
+            print(f"✅ Teleobi client initialized (Tier {tier})")
+        except Exception as e:
+            print(f"❌ Failed to initialize Teleobi client: {e}")
+            return None
+    return _teleobi_client
+
+@application.route('/api/whatsapp/teleobi/templates/sync', methods=['POST', 'OPTIONS'])
+@login_required
+def api_sync_teleobi_templates():
+    """Sync templates from Teleobi API and cache them"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        client = get_teleobi_client()
+        if not client:
+            return jsonify({'error': 'Teleobi client not available'}), 500
+        
+        # Fetch templates from Teleobi
+        templates = client.get_templates(force_refresh=True)
+        
+        if not templates:
+            return jsonify({
+                'success': False,
+                'message': 'No templates found or API error',
+                'templates': []
+            }), 200
+        
+        # Update cache
+        synced_count = 0
+        for template in templates:
+            cached = TeleobiTemplateCache.query.filter_by(template_id=template.template_id).first()
+            
+            # Convert variables dict to JSON string for storage
+            variables_json = json.dumps(template.variables) if isinstance(template.variables, dict) else template.variables
+            
+            if cached:
+                # Update existing
+                cached.template_name = template.template_name
+                cached.template_type = template.template_type.value
+                cached.status = template.status
+                cached.category = template.category
+                cached.language = template.language
+                cached.variables = variables_json
+                cached.template_json = template.template_json
+                cached.teleobi_template_id = template.teleobi_template_id  # Store Teleobi internal ID
+                cached.whatsapp_business_id = template.whatsapp_business_id  # Store WhatsApp Business ID per template
+                cached.synced_at = datetime.now(ist)
+            else:
+                # Create new
+                cached = TeleobiTemplateCache(
+                    template_id=template.template_id,  # WhatsApp template ID
+                    teleobi_template_id=template.teleobi_template_id,  # Teleobi internal ID
+                    template_name=template.template_name,
+                    template_type=template.template_type.value,
+                    status=template.status,
+                    category=template.category,
+                    language=template.language,
+                    variables=variables_json,
+                    template_json=template.template_json,
+                    whatsapp_business_id=template.whatsapp_business_id,  # Store WhatsApp Business ID per template
+                    phone_number_id=os.getenv('TELEOBI_PHONE_NUMBER_ID', '')
+                )
+                db.session.add(cached)
+            
+            synced_count += 1
+        
+        db.session.commit()
+        
+        response = jsonify({
+            'success': True,
+            'message': f'Synced {synced_count} templates',
+            'synced_count': synced_count
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error syncing templates: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/whatsapp/teleobi/templates', methods=['GET', 'OPTIONS'])
+@login_required
+def api_get_teleobi_templates():
+    """Get cached Teleobi templates, optionally filtered by type"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    try:
+        template_type = request.args.get('type')  # 'utility' or 'marketing'
+        status = request.args.get('status', 'Approved')  # Only show approved by default
+        
+        query = TeleobiTemplateCache.query.filter_by(status=status)
+        
+        if template_type:
+            query = query.filter_by(template_type=template_type)
+        
+        templates = query.order_by(TeleobiTemplateCache.template_name).all()
+        
+        templates_data = []
+        for template in templates:
+            # Parse template JSON to get header info
+            header_info = {}
+            if template.template_json:
+                try:
+                    template_json = json.loads(template.template_json) if isinstance(template.template_json, str) else template.template_json
+                    components = template_json.get('components', [])
+                    for component in components:
+                        if component.get('type') == 'header':
+                            format_type = component.get('format', '')
+                            if format_type in ['image', 'video', 'document']:
+                                header_info = {
+                                    'has_image': format_type == 'image',
+                                    'has_video': format_type == 'video',
+                                    'has_document': format_type == 'document',
+                                    'header_type': 'media',
+                                    'header_subtype': format_type
+                                }
+                                break
+                except:
+                    pass
+            
+            # Parse variables from JSON string if needed
+            variables_data = template.variables or {}
+            if isinstance(variables_data, str):
+                try:
+                    variables_data = json.loads(variables_data)
+                except:
+                    variables_data = {}
+            
+            # Filter out internal keys and ensure only valid variables
+            filtered_variables = {}
+            for key, value in variables_data.items():
+                # Skip internal keys
+                if key.startswith('_'):
+                    continue
+                # Only include valid variable keys (body_var_X or var_X pattern)
+                import re
+                if not re.match(r'^(body_var_|var_)\d+$', key):
+                    continue
+                # Only include variables with proper metadata structure
+                if isinstance(value, dict) and ('label' in value or 'position' in value):
+                    filtered_variables[key] = value
+            
+            templates_data.append({
+                'template_id': template.template_id,
+                'template_name': template.template_name,
+                'template_type': template.template_type,
+                'status': template.status,
+                'category': template.category,
+                'language': template.language,
+                'variables': filtered_variables,  # Only send valid variables
+                'header_info': header_info,
+                'synced_at': template.synced_at.isoformat() if template.synced_at else None
+            })
+        
+        response = jsonify({
+            'success': True,
+            'templates': templates_data,
+            'count': len(templates_data)
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+        
+    except Exception as e:
+        print(f"Error fetching templates: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/whatsapp/teleobi/send-bulk', methods=['POST', 'OPTIONS'])
+@login_required
+def api_send_bulk_whatsapp():
+    """
+    Send bulk WhatsApp template messages with comprehensive validation
+    Requires: template_name, recipients (list of phone numbers or lead IDs), variables
+    """
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        template_name = data.get('template_name')
+        recipients = data.get('recipients', [])  # List of phone numbers or lead IDs
+        variables = data.get('variables', {})  # Template variables
+        filter_criteria = data.get('filter_criteria', {})  # For tracking
+        
+        if not template_name:
+            return jsonify({'error': 'Template name is required'}), 400
+        
+        if not recipients:
+            return jsonify({'error': 'At least one recipient is required'}), 400
+        
+        # Validate template exists and is approved
+        template = TeleobiTemplateCache.query.filter_by(
+            template_name=template_name,
+            status='Approved'
+        ).first()
+        
+        if not template:
+            return jsonify({
+                'error': f'Template "{template_name}" not found or not approved'
+            }), 400
+        
+        # Parse template variables from stored JSON
+        template_variables = template.variables or {}
+        if isinstance(template_variables, str):
+            try:
+                template_variables = json.loads(template_variables)
+            except:
+                template_variables = {}
+        
+        # Validate that all required variables are provided
+        required_vars = []
+        provided_vars = set()
+        
+        # Track what variables are provided (check both body_var_X and var_X formats)
+        for key in variables.keys():
+            if key.startswith('body_var_'):
+                var_num = key.replace('body_var_', '')
+                provided_vars.add(f'body_var_{var_num}')
+                provided_vars.add(f'var_{var_num}')
+            elif key.startswith('var_'):
+                var_num = key.replace('var_', '')
+                provided_vars.add(f'body_var_{var_num}')
+                provided_vars.add(f'var_{var_num}')
+            else:
+                provided_vars.add(key)
+        
+        for var_key, var_info in template_variables.items():
+            if var_key.startswith('_'):
+                continue  # Skip internal keys
+            if isinstance(var_info, dict) and var_info.get('required', True):
+                # Check if this variable is provided (in any format)
+                if var_key not in provided_vars:
+                    # Also check alternative formats
+                    if var_key.startswith('body_var_'):
+                        var_num = var_key.replace('body_var_', '')
+                        if f'var_{var_num}' not in provided_vars:
+                            required_vars.append(var_info.get('label', var_key))
+                    else:
+                        required_vars.append(var_info.get('label', var_key))
+        
+        if required_vars:
+            return jsonify({
+                'error': f'Template requires the following variables: {", ".join(required_vars)}',
+                'required_variables': required_vars,
+                'template_variables': {k: v for k, v in template_variables.items() if not k.startswith('_')},
+                'provided_variables': list(variables.keys())
+            }), 400
+        
+        # Check if template requires image header
+        header_info = {}
+        if template.template_json:
+            try:
+                template_json = json.loads(template.template_json) if isinstance(template.template_json, str) else template.template_json
+                components = template_json.get('components', [])
+                for component in components:
+                    if component.get('type') == 'header':
+                        format_type = component.get('format', '')
+                        if format_type in ['image', 'video', 'document']:
+                            header_info = {
+                                'has_image': format_type == 'image',
+                                'has_video': format_type == 'video',
+                                'has_document': format_type == 'document',
+                                'header_type': 'media',
+                                'header_subtype': format_type
+                            }
+                            # Check if image is required but not provided
+                            # Note: Some templates might have default images, so we warn but don't block
+                            if format_type == 'image' and not variables.get('header_image_url'):
+                                # This is a warning, not an error - some templates might work without it
+                                # But we should inform the user
+                                pass  # Don't block, but we'll log it
+            except:
+                pass
+        
+        # Get Teleobi client
+        client = get_teleobi_client()
+        if not client:
+            return jsonify({'error': 'Teleobi client not available'}), 500
+        
+        # Pre-send validation: Check quality metrics
+        # Note: We use internal metrics which may start at 0, so we only warn, don't block
+        # The actual WhatsApp account quality should be checked in Teleobi dashboard
+        quality_metrics = client.get_quality_metrics()
+        # Only block if we have significant history AND low success rate
+        if quality_metrics.get('total_sends', 0) > 10 and quality_metrics.get('success_rate', 1.0) < 0.3:
+            return jsonify({
+                'error': 'Account quality is low based on recent sends. Please check account status before sending.',
+                'quality_metrics': quality_metrics,
+                'warning': 'This check is based on internal metrics. Verify actual account quality in Teleobi dashboard.'
+            }), 400
+        
+        # Check rate limits
+        rate_stats = quality_metrics.get('rate_limit_stats', {})
+        daily_used = rate_stats.get('per_day', {}).get('used', 0)
+        daily_limit = rate_stats.get('per_day', {}).get('limit', 1000)
+        
+        if daily_limit != 'unlimited' and daily_used + len(recipients) > daily_limit:
+            return jsonify({
+                'error': f'Daily limit would be exceeded. Used: {daily_used}/{daily_limit}, Requested: {len(recipients)}',
+                'rate_limit': rate_stats
+            }), 429
+        
+        # Create bulk job record
+        bulk_job = WhatsAppBulkJob(
+            job_name=data.get('job_name', f'Bulk send - {template_name}'),
+            template_name=template_name,
+            total_recipients=len(recipients),
+            status='pending',
+            filter_criteria=filter_criteria,
+            created_by=current_user.id
+        )
+        db.session.add(bulk_job)
+        db.session.commit()
+        
+        # Process in background thread
+        import threading
+        thread = threading.Thread(
+            target=process_bulk_whatsapp_job,
+            args=(bulk_job.id, recipients, template_name, variables, template.template_type),
+            daemon=True
+        )
+        thread.start()
+        
+        response = jsonify({
+            'success': True,
+            'message': 'Bulk send job created',
+            'job_id': bulk_job.id,
+            'total_recipients': len(recipients),
+            'status': 'processing'
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response, 202  # Accepted
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = str(e)
+        print(f"Error creating bulk send job: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        # Return more detailed error for debugging
+        return jsonify({
+            'error': error_msg,
+            'details': 'Check backend logs for more information'
+        }), 500
+
+def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str, variables: dict, template_type: str):
+    """
+    Background function to process bulk WhatsApp sending
+    Runs in separate thread with rate limiting and error handling
+    """
+    # CRITICAL: Create application context for background thread
+    # Flask-SQLAlchemy requires application context to work
+    with application.app_context():
+        try:
+            # Get job from database
+            bulk_job = WhatsAppBulkJob.query.get(job_id)
+            if not bulk_job:
+                print(f"Job {job_id} not found")
+                return
+            
+            bulk_job.status = 'processing'
+            bulk_job.started_at = datetime.now(ist)
+            db.session.commit()
+            
+            # Get Teleobi client
+            client = get_teleobi_client()
+            if not client:
+                bulk_job.status = 'failed'
+                bulk_job.completed_at = datetime.now(ist)
+                db.session.commit()
+                return
+            
+            sent_count = 0
+            failed_count = 0
+            total_recipients = len(recipients)
+            start_time = datetime.now(ist)
+            
+            # Process each recipient
+            for index, recipient in enumerate(recipients, 1):
+                processed_count = index  # Current progress
+                try:
+                    # Determine phone number
+                    phone_number = None
+                    lead_id = None
+                    
+                    if isinstance(recipient, dict):
+                        phone_number = recipient.get('phone_number') or recipient.get('mobile')
+                        lead_id = recipient.get('lead_id')
+                    elif isinstance(recipient, str):
+                        # Assume it's a phone number
+                        phone_number = recipient
+                    elif isinstance(recipient, int):
+                        # Assume it's a lead ID
+                        lead = Lead.query.get(recipient)
+                        if lead:
+                            phone_number = lead.mobile
+                            lead_id = lead.id
+                    
+                    if not phone_number:
+                        failed_count += 1
+                        continue
+                    
+                    # Rate limiting check and wait if needed
+                    can_send, wait_time = client.rate_limiter.can_send()
+                    if not can_send:
+                        time_module.sleep(wait_time)
+                    
+                    # Get template from cache
+                    template_cache = TeleobiTemplateCache.query.filter_by(
+                        template_name=template_name,
+                        status='Approved'
+                    ).first()
+                    
+                    if not template_cache:
+                        print(f"❌ Template '{template_name}' not found in cache")
+                        failed_count += 1
+                        bulk_job.failed_count = failed_count
+                        db.session.commit()
+                        continue
+                    
+                    # Use Teleobi internal template ID (for sending), fallback to WhatsApp template_id
+                    template_id = template_cache.teleobi_template_id or template_cache.template_id
+                    
+                    if not template_id:
+                        print(f"❌ Template '{template_name}' has no template ID")
+                        failed_count += 1
+                        bulk_job.failed_count = failed_count
+                        db.session.commit()
+                        continue
+                    
+                    # Send message
+                    print(f"📤 Sending to {phone_number} using template '{template_name}' (ID: {template_id}) with variables: {variables}")
+                    result = client.send_template_message(
+                        phone_number=phone_number,
+                        template_name=template_name,
+                        template_id=template_id,  # Pass template_id
+                        variables=variables,
+                        validate_before_send=True
+                    )
+                    
+                    # Log result
+                    if result.success:
+                        print(f"✅ Successfully sent to {phone_number}. WA Message ID: {result.wa_message_id}")
+                    else:
+                        print(f"❌ Failed to send to {phone_number}: {result.error_message}")
+                    
+                    # Create send record
+                    send_record = WhatsAppSend(
+                        lead_id=lead_id,
+                        phone_number=phone_number,
+                        template_id=None,  # Can be filled from template cache
+                        template_name=template_name,
+                        template_type=template_type,
+                        variables=json.dumps(variables) if variables else None,
+                        wa_message_id=result.wa_message_id if result.success else None,
+                        status='sent' if result.success else 'failed',
+                        sent_at=datetime.now(ist) if result.success else None,
+                        error_message=result.error_message if not result.success else None,
+                        created_by=bulk_job.created_by
+                    )
+                    db.session.add(send_record)
+                    db.session.flush()  # Flush to get the ID, but don't commit yet
+                    
+                    # Store job ID in variables JSON for easier filtering (temporary solution)
+                    # In future, we can add bulk_job_id column to WhatsAppSend
+                    if variables:
+                        try:
+                            vars_dict = json.loads(send_record.variables) if isinstance(send_record.variables, str) else send_record.variables
+                            vars_dict['_bulk_job_id'] = bulk_job.id
+                            send_record.variables = json.dumps(vars_dict)
+                        except:
+                            pass
+                    
+                    if result.success:
+                        sent_count += 1
+                        bulk_job.sent_count = sent_count
+                    else:
+                        failed_count += 1
+                        bulk_job.failed_count = failed_count
+                    
+                    # Update processed count for progress tracking
+                    bulk_job.processed_count = processed_count
+                    db.session.commit()
+                    
+                    # Log progress every 10 messages or at the end
+                    if processed_count % 10 == 0 or processed_count == total_recipients:
+                        elapsed = (datetime.now(ist) - start_time).total_seconds()
+                        rate = processed_count / elapsed if elapsed > 0 else 0
+                        remaining = total_recipients - processed_count
+                        eta_seconds = remaining / rate if rate > 0 else 0
+                        print(f"📊 Progress: {processed_count}/{total_recipients} ({processed_count*100//total_recipients}%) | Rate: {rate:.2f} msg/s | ETA: {eta_seconds:.0f}s")
+                    
+                    # Small delay between sends (additional safety)
+                    time_module.sleep(0.5)
+                    
+                except Exception as e:
+                    print(f"Error processing recipient {recipient}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    failed_count += 1
+                    bulk_job.failed_count = failed_count
+                    db.session.commit()
+                    continue
+            
+            # Update job status
+            bulk_job.status = 'completed' if failed_count == 0 else 'partial'
+            bulk_job.completed_at = datetime.now(ist)
+            bulk_job.sent_count = sent_count
+            bulk_job.failed_count = failed_count
+            db.session.commit()
+            
+            print(f"✅ Bulk job {job_id} completed: {sent_count} sent, {failed_count} failed")
+            
+        except Exception as e:
+            print(f"❌ Error processing bulk job {job_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Try to update job status to failed
+            try:
+                bulk_job = WhatsAppBulkJob.query.get(job_id)
+                if bulk_job:
+                    bulk_job.status = 'failed'
+                    bulk_job.completed_at = datetime.now(ist)
+                    bulk_job.failed_count = len(recipients) if recipients else 0
+                    db.session.commit()
+            except Exception as inner_e:
+                print(f"❌ Failed to update job status: {inner_e}")
+
+@application.route('/api/whatsapp/teleobi/jobs/<int:job_id>', methods=['GET', 'OPTIONS'])
+@login_required
+def api_get_bulk_job_status(job_id):
+    """Get status of a bulk send job"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    try:
+        job = WhatsAppBulkJob.query.get_or_404(job_id)
+        
+        # Check permissions
+        if not current_user.is_admin and job.created_by != current_user.id:
+            return jsonify({'error': 'Permission denied'}), 403
+        
+        # Get detailed statistics from send records
+        send_records = WhatsAppSend.query.filter(
+            WhatsAppSend.template_name == job.template_name,
+            WhatsAppSend.created_at >= job.created_at,
+            WhatsAppSend.created_at < (job.created_at + timedelta(hours=24))  # Within 24 hours of job creation
+        ).all()
+        
+        # Further filter by checking if variables contain job ID (if stored)
+        filtered_records = []
+        for record in send_records:
+            if record.variables:
+                try:
+                    vars_dict = json.loads(record.variables) if isinstance(record.variables, str) else record.variables
+                    if vars_dict.get('_bulk_job_id') == job.id:
+                        filtered_records.append(record)
+                    elif not vars_dict.get('_bulk_job_id'):
+                        filtered_records.append(record)
+                except:
+                    filtered_records.append(record)
+            else:
+                filtered_records.append(record)
+        
+        send_records = filtered_records
+        
+        # Get progress from job itself (real-time during processing)
+        # Use processed_count from job for accurate progress
+        processed_count = job.processed_count or 0
+        
+        # Calculate actual counts from send records
+        actual_sent = len([s for s in send_records if s.status in ['sent', 'delivered', 'read']])
+        delivered_count = len([s for s in send_records if s.status in ['delivered', 'read']])
+        read_count = len([s for s in send_records if s.status == 'read'])
+        failed_count = len([s for s in send_records if s.status == 'failed'])
+        
+        # Calculate progress percentage
+        progress_percentage = (processed_count / job.total_recipients * 100) if job.total_recipients > 0 else 0
+        
+        # Calculate ETA if job is processing
+        eta_seconds = None
+        if job.status == 'processing' and job.started_at and processed_count > 0:
+            elapsed = (datetime.now(ist) - job.started_at).total_seconds()
+            if elapsed > 0:
+                rate = processed_count / elapsed  # messages per second
+                remaining = job.total_recipients - processed_count
+                if rate > 0:
+                    eta_seconds = remaining / rate
+        
+        # Calculate rates
+        delivery_rate = (delivered_count / actual_sent * 100) if actual_sent > 0 else 0
+        read_rate = (read_count / delivered_count * 100) if delivered_count > 0 else 0
+        success_rate = (actual_sent / job.total_recipients * 100) if job.total_recipients > 0 else 0
+        
+        response = jsonify({
+            'success': True,
+            'job': {
+                'id': job.id,
+                'job_name': job.job_name,
+                'template_name': job.template_name,
+                'total_recipients': job.total_recipients,
+                'processed_count': processed_count,
+                'sent_count': actual_sent,
+                'delivered_count': delivered_count,
+                'read_count': read_count,
+                'failed_count': failed_count,
+                'delivery_rate': round(delivery_rate, 2),
+                'read_rate': round(read_rate, 2),
+                'success_rate': round(success_rate, 2),
+                'progress_percentage': round(progress_percentage, 2),
+                'eta_seconds': round(eta_seconds, 0) if eta_seconds else None,
+                'status': job.status,
+                'started_at': job.started_at.isoformat() if job.started_at else None,
+                'completed_at': job.completed_at.isoformat() if job.completed_at else None,
+                'created_at': job.created_at.isoformat() if job.created_at else None
+            }
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+        
+    except Exception as e:
+        print(f"Error fetching job status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/whatsapp/teleobi/jobs', methods=['GET', 'OPTIONS'])
+@login_required
+def api_list_bulk_jobs():
+    """List bulk send jobs with pagination (top 5 most recent)"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    try:
+        # Get limit from query params (default 5)
+        limit = request.args.get('limit', 5, type=int)
+        
+        # Check permissions
+        if not current_user.is_admin:
+            jobs_query = WhatsAppBulkJob.query.filter_by(created_by=current_user.id).order_by(WhatsAppBulkJob.created_at.desc())
+        else:
+            jobs_query = WhatsAppBulkJob.query.order_by(WhatsAppBulkJob.created_at.desc())
+        
+        # Get paginated results (top N most recent)
+        jobs = jobs_query.limit(limit).all()
+        
+        jobs_data = []
+        for job in jobs:
+            # Get basic statistics from send records (without fetching from Teleobi)
+            # This is lightweight and doesn't require API calls
+            try:
+                # Filter send records for this specific job
+                # We filter by template_name and created_at range, and also check if variables contain job ID
+                send_records = WhatsAppSend.query.filter(
+                    WhatsAppSend.template_name == job.template_name,
+                    WhatsAppSend.created_at >= job.created_at,
+                    WhatsAppSend.created_at < (job.created_at + timedelta(hours=24))  # Within 24 hours of job creation
+                ).all()
+                
+                # Further filter by checking if variables contain job ID (if stored)
+                # This helps distinguish between jobs with same template
+                filtered_records = []
+                for record in send_records:
+                    # If variables contain job ID, use it for filtering
+                    if record.variables:
+                        try:
+                            vars_dict = json.loads(record.variables) if isinstance(record.variables, str) else record.variables
+                            if vars_dict.get('_bulk_job_id') == job.id:
+                                filtered_records.append(record)
+                            elif not vars_dict.get('_bulk_job_id'):
+                                # If no job ID stored, include if created within job time window
+                                filtered_records.append(record)
+                        except:
+                            # If parsing fails, include the record (backward compatibility)
+                            filtered_records.append(record)
+                    else:
+                        # No variables, include if within time window
+                        filtered_records.append(record)
+                
+                send_records = filtered_records
+                
+                processed_count = len(send_records)
+                actual_sent = len([s for s in send_records if s.status in ['sent', 'delivered', 'read']])
+                delivered_count = len([s for s in send_records if s.status in ['delivered', 'read']])
+                read_count = len([s for s in send_records if s.status == 'read'])
+                failed_count = len([s for s in send_records if s.status == 'failed'])
+                
+                delivery_rate = (delivered_count / actual_sent * 100) if actual_sent > 0 else 0
+                read_rate = (read_count / delivered_count * 100) if delivered_count > 0 else 0
+                success_rate = (actual_sent / job.total_recipients * 100) if job.total_recipients > 0 else 0
+            except Exception as e:
+                print(f"Error calculating stats for job {job.id}: {e}")
+                processed_count = 0
+                actual_sent = 0
+                delivered_count = 0
+                read_count = 0
+                failed_count = 0
+                delivery_rate = 0
+                read_rate = 0
+                success_rate = 0
+            
+            jobs_data.append({
+                'id': job.id,
+                'job_name': job.job_name or f'Job #{job.id}',
+                'template_name': job.template_name,
+                'total_recipients': job.total_recipients,
+                'processed_count': processed_count,
+                'sent_count': actual_sent,
+                'delivered_count': delivered_count,
+                'read_count': read_count,
+                'failed_count': failed_count,
+                'delivery_rate': round(delivery_rate, 2),
+                'read_rate': round(read_rate, 2),
+                'success_rate': round(success_rate, 2),
+                'status': job.status,
+                'started_at': job.started_at.isoformat() if job.started_at else None,
+                'completed_at': job.completed_at.isoformat() if job.completed_at else None,
+                'created_at': job.created_at.isoformat() if job.created_at else None,
+                'needs_refresh': True  # Flag to indicate details need to be fetched
+            })
+        
+        response = jsonify({
+            'success': True,
+            'jobs': jobs_data,
+            'count': len(jobs_data),
+            'total': jobs_query.count()
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+        
+    except Exception as e:
+        print(f"Error fetching jobs: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+@application.route('/api/whatsapp/teleobi/jobs/<int:job_id>/fetch-details', methods=['POST', 'OPTIONS'])
+@login_required
+def api_fetch_job_details(job_id):
+    """Manually fetch delivery and read status from Teleobi API for a specific job"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    try:
+        # Get job
+        job = WhatsAppBulkJob.query.get_or_404(job_id)
+        
+        # Check permissions
+        if not current_user.is_admin and job.created_by != current_user.id:
+            return jsonify({'error': 'Permission denied'}), 403
+        
+        # Get all send records for this job
+        # Filter by template_name and created_at range
+        send_records = WhatsAppSend.query.filter(
+            WhatsAppSend.template_name == job.template_name,
+            WhatsAppSend.created_at >= job.created_at,
+            WhatsAppSend.created_at < (job.created_at + timedelta(hours=24))  # Within 24 hours of job creation
+        ).all()
+        
+        # Further filter by checking if variables contain job ID (if stored)
+        filtered_records = []
+        for record in send_records:
+            # If variables contain job ID, use it for filtering
+            if record.variables:
+                try:
+                    vars_dict = json.loads(record.variables) if isinstance(record.variables, str) else record.variables
+                    if vars_dict.get('_bulk_job_id') == job.id:
+                        filtered_records.append(record)
+                    elif not vars_dict.get('_bulk_job_id'):
+                        # If no job ID stored, include if created within job time window
+                        filtered_records.append(record)
+                except:
+                    # If parsing fails, include the record (backward compatibility)
+                    filtered_records.append(record)
+            else:
+                # No variables, include if within time window
+                filtered_records.append(record)
+        
+        send_records = filtered_records
+        
+        # Get Teleobi client
+        client = get_teleobi_client()
+        if not client:
+            return jsonify({'error': 'Teleobi client not available'}), 500
+        
+        # Get whatsapp_bot_id from template cache (per-template) or environment (fallback)
+        whatsapp_bot_id = None
+        
+        # PRIORITY 1: Get from template cache (template-specific)
+        template_cache = TeleobiTemplateCache.query.filter_by(template_name=job.template_name).first()
+        if template_cache and template_cache.whatsapp_business_id:
+            whatsapp_bot_id = template_cache.whatsapp_business_id
+            print(f"✅ Using template-specific whatsapp_business_id: {whatsapp_bot_id} for template '{job.template_name}'")
+        
+        # PRIORITY 2: Fallback to environment variable (global, only if template doesn't have it)
+        if not whatsapp_bot_id:
+            import os
+            env_bot_id = os.getenv('TELEOBI_WHATSAPP_BOT_ID')
+            if env_bot_id:
+                try:
+                    whatsapp_bot_id = int(env_bot_id)
+                    print(f"⚠️ Using global TELEOBI_WHATSAPP_BOT_ID: {whatsapp_bot_id} (template '{job.template_name}' doesn't have specific ID)")
+                except (ValueError, TypeError):
+                    pass
+        
+        if not whatsapp_bot_id:
+            print(f"⚠️ Warning: whatsapp_bot_id not found for template '{job.template_name}'. Message status API calls may fail.")
+            print(f"   Please sync templates to get per-template whatsapp_business_id, or set TELEOBI_WHATSAPP_BOT_ID in .env file.")
+        
+        # Fetch status for each message that has a wa_message_id
+        updated_count = 0
+        for send_record in send_records:
+            if send_record.wa_message_id and send_record.status != 'failed':
+                try:
+                    print(f"📊 Fetching status for message {send_record.wa_message_id} (current status: {send_record.status})")
+                    
+                    # Fetch status from Teleobi with whatsapp_bot_id
+                    status_data = client.get_message_status(send_record.wa_message_id, whatsapp_bot_id=whatsapp_bot_id)
+                    
+                    print(f"📊 Status data received: {status_data}")
+                    
+                    if status_data:
+                        # Teleobi API returns: message_status, delivery_status_updated_at, read_time, failed_time, failed_reason
+                        # Handle None values properly - message_status can be None
+                        message_status_raw = status_data.get('message_status')
+                        message_status = message_status_raw.lower() if message_status_raw and isinstance(message_status_raw, str) else ''
+                        read_time = status_data.get('read_time')
+                        failed_time = status_data.get('failed_time')
+                        failed_reason = status_data.get('failed_reason', '')
+                        delivery_status_updated_at = status_data.get('delivery_status_updated_at')
+                        
+                        print(f"📊 Parsed status: {message_status or 'None'}, read_time: {read_time}, failed_time: {failed_time}, delivery_updated: {delivery_status_updated_at}")
+                        
+                        # If all status fields are None, the message might be too new or status not available yet
+                        if not message_status and not read_time and not failed_time and not delivery_status_updated_at:
+                            print(f"⚠️ No status information available yet for message {send_record.wa_message_id}. Message may be too new or status not updated.")
+                            continue
+                        
+                        # Update status based on Teleobi response
+                        old_status = send_record.status
+                        
+                        # Check for read status first (highest priority)
+                        if read_time:
+                            send_record.status = 'read'
+                            if not send_record.read_at:
+                                try:
+                                    # Parse read_time if it's a string
+                                    if isinstance(read_time, str):
+                                        send_record.read_at = datetime.fromisoformat(read_time.replace('Z', '+00:00'))
+                                    else:
+                                        send_record.read_at = datetime.now(ist)
+                                except:
+                                    send_record.read_at = datetime.now(ist)
+                            print(f"✅ Updated to READ status")
+                        
+                        # Then check for delivered (check both message_status and delivery_status_updated_at)
+                        elif message_status == 'delivered' or delivery_status_updated_at:
+                            send_record.status = 'delivered'
+                            if not send_record.delivered_at:
+                                delivery_updated = status_data.get('delivery_status_updated_at')
+                                if delivery_updated:
+                                    try:
+                                        send_record.delivered_at = datetime.fromisoformat(delivery_updated.replace('Z', '+00:00'))
+                                    except:
+                                        send_record.delivered_at = datetime.now(ist)
+                                else:
+                                    send_record.delivered_at = datetime.now(ist)
+                            print(f"✅ Updated to DELIVERED status")
+                        
+                        # Check for failed
+                        elif message_status == 'failed' or failed_time:
+                            send_record.status = 'failed'
+                            send_record.error_message = failed_reason or 'Unknown error'
+                            print(f"❌ Updated to FAILED status: {failed_reason}")
+                        
+                        # Keep sent status if still sent or if status is not available yet
+                        elif message_status == 'sent' or not message_status:
+                            # If message_status is empty/None but we have a wa_message_id, keep as sent
+                            if send_record.status != 'sent':
+                                send_record.status = 'sent'
+                                if not send_record.sent_at:
+                                    send_record.sent_at = datetime.now(ist)
+                            if not message_status:
+                                print(f"📤 Status not available yet, keeping as SENT")
+                            else:
+                                print(f"📤 Status remains SENT")
+                        
+                        if old_status != send_record.status:
+                            updated_count += 1
+                            print(f"🔄 Status changed: {old_status} -> {send_record.status}")
+                    else:
+                        print(f"⚠️ No status data returned for message {send_record.wa_message_id}")
+                            
+                except Exception as e:
+                    print(f"❌ Error fetching status for message {send_record.wa_message_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+        
+        db.session.commit()
+        
+        # Recalculate statistics
+        send_records = WhatsAppSend.query.filter(
+            WhatsAppSend.template_name == job.template_name,
+            WhatsAppSend.created_at >= job.created_at
+        ).all()
+        
+        processed_count = len(send_records)
+        actual_sent = len([s for s in send_records if s.status in ['sent', 'delivered', 'read']])
+        delivered_count = len([s for s in send_records if s.status in ['delivered', 'read']])
+        read_count = len([s for s in send_records if s.status == 'read'])
+        failed_count = len([s for s in send_records if s.status == 'failed'])
+        
+        delivery_rate = (delivered_count / actual_sent * 100) if actual_sent > 0 else 0
+        read_rate = (read_count / delivered_count * 100) if delivered_count > 0 else 0
+        success_rate = (actual_sent / job.total_recipients * 100) if job.total_recipients > 0 else 0
+        
+        response = jsonify({
+            'success': True,
+            'job': {
+                'id': job.id,
+                'job_name': job.job_name or f'Job #{job.id}',
+                'template_name': job.template_name,
+                'total_recipients': job.total_recipients,
+                'processed_count': processed_count,
+                'sent_count': actual_sent,
+                'delivered_count': delivered_count,
+                'read_count': read_count,
+                'failed_count': failed_count,
+                'delivery_rate': round(delivery_rate, 2),
+                'read_rate': round(read_rate, 2),
+                'success_rate': round(success_rate, 2),
+                'status': job.status,
+                'updated_count': updated_count
+            }
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+        
+    except Exception as e:
+        print(f"Error fetching job details: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/whatsapp/teleobi/template-preview', methods=['POST', 'OPTIONS'])
+@login_required
+def api_template_preview():
+    """Generate preview of how template message will look with variables"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    try:
+        data = request.get_json()
+        template_name = data.get('template_name')
+        variables = data.get('variables', {})
+        
+        if not template_name:
+            return jsonify({'error': 'Template name is required'}), 400
+        
+        # Get template from cache
+        template = TeleobiTemplateCache.query.filter_by(template_name=template_name).first()
+        if not template:
+            return jsonify({'error': 'Template not found'}), 404
+        
+        # Parse template JSON
+        template_json = {}
+        if template.template_json:
+            try:
+                template_json = json.loads(template.template_json) if isinstance(template.template_json, str) else template.template_json
+            except:
+                pass
+        
+        # Build preview
+        preview = {
+            'header': None,
+            'body': '',
+            'footer': None,
+            'buttons': None
+        }
+        
+        components = template_json.get('components', [])
+        for component in components:
+            comp_type = component.get('type')
+            
+            if comp_type == 'header':
+                format_type = component.get('format', '')
+                if format_type == 'image' and variables.get('header_image_url'):
+                    preview['header'] = {
+                        'type': 'image',
+                        'url': variables.get('header_image_url')
+                    }
+                elif format_type == 'text':
+                    text = component.get('text', '')
+                    preview['header'] = {
+                        'type': 'text',
+                        'text': text
+                    }
+            
+            elif comp_type == 'body':
+                body_text = component.get('text', '')
+                # Replace variables {{1}}, {{2}}, etc. with actual values
+                import re
+                for key, value in variables.items():
+                    if key.startswith('body_var_'):
+                        var_num = key.replace('body_var_', '')
+                        body_text = body_text.replace(f'{{{{{var_num}}}}}', value or f'[Variable {var_num}]')
+                    elif key.startswith('var_'):
+                        var_num = key.replace('var_', '')
+                        body_text = body_text.replace(f'{{{{{var_num}}}}}', value or f'[Variable {var_num}]')
+                preview['body'] = body_text
+            
+            elif comp_type == 'footer':
+                preview['footer'] = component.get('text', '')
+            
+            elif comp_type == 'button':
+                preview['buttons'] = component.get('buttons', [])
+        
+        response = jsonify({
+            'success': True,
+            'preview': preview,
+            'template_name': template_name
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+        
+    except Exception as e:
+        print(f"Error generating preview: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/whatsapp/teleobi/quality-metrics', methods=['GET', 'OPTIONS'])
+@login_required
+def api_get_quality_metrics():
+    """Get WhatsApp account quality metrics and rate limit status"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        client = get_teleobi_client()
+        if not client:
+            return jsonify({'error': 'Teleobi client not available'}), 500
+        
+        metrics = client.get_quality_metrics()
+        
+        response = jsonify({
+            'success': True,
+            'metrics': metrics
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+        
+    except Exception as e:
+        print(f"Error fetching quality metrics: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/whatsapp/teleobi/leads/filter', methods=['POST', 'OPTIONS'])
+@login_required
+def api_filter_leads_for_whatsapp():
+    """
+    Filter leads based on criteria for bulk WhatsApp sending
+    Supports filtering by: followup_date, status, created_date, etc.
+    """
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    try:
+        data = request.get_json() or {}
+        
+        # Build query
+        query = Lead.query
+        
+        # Apply user filter
+        if not current_user.is_admin:
+            query = query.filter(Lead.creator_id == current_user.id)
+        elif data.get('user_id'):
+            query = query.filter(Lead.creator_id == data['user_id'])
+        
+        # Filter by followup date
+        if data.get('followup_date'):
+            try:
+                target_date = datetime.strptime(data['followup_date'], '%Y-%m-%d').date()
+                target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
+                target_end = target_start + timedelta(days=1)
+                target_start_utc = target_start.astimezone(pytz.UTC)
+                target_end_utc = target_end.astimezone(pytz.UTC)
+                query = query.filter(
+                    Lead.followup_date >= target_start_utc,
+                    Lead.followup_date < target_end_utc
+                )
+            except ValueError:
+                pass
+        
+        # Filter by status
+        if data.get('status'):
+            query = query.filter(Lead.status == data['status'])
+        
+        # Filter by created date
+        if data.get('created_date'):
+            try:
+                target_date = datetime.strptime(data['created_date'], '%Y-%m-%d').date()
+                target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
+                target_end = target_start + timedelta(days=1)
+                target_start_utc = target_start.astimezone(pytz.UTC)
+                target_end_utc = target_end.astimezone(pytz.UTC)
+                query = query.filter(
+                    Lead.created_at >= target_start_utc,
+                    Lead.created_at < target_end_utc
+                )
+            except ValueError:
+                pass
+        
+        # Get leads
+        leads = query.limit(10000).all()  # Max 10,000 for safety
+        
+        leads_data = []
+        for lead in leads:
+            leads_data.append({
+                'lead_id': lead.id,
+                'phone_number': lead.mobile,
+                'customer_name': lead.customer_name,
+                'status': lead.status,
+                'followup_date': lead.followup_date.isoformat() if lead.followup_date else None
+            })
+        
+        response = jsonify({
+            'success': True,
+            'leads': leads_data,
+            'count': len(leads_data)
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+        
+    except Exception as e:
+        print(f"Error filtering leads: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
