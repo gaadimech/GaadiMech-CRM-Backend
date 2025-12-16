@@ -20,6 +20,6 @@ if __name__ == '__main__':
     print("📍 Database: crm-portal-db")
     print("🌐 Server: http://localhost:5000")
     print("=" * 50)
-    
+
     # Run the app without the scheduler setup
     app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)

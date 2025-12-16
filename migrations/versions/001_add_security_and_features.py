@@ -1,7 +1,7 @@
 """Add security fixes and new feature tables
 
 Revision ID: 001_security_features
-Revises: 
+Revises:
 Create Date: 2025-11-30 12:00:00.000000
 
 """
@@ -18,16 +18,16 @@ depends_on = None
 def upgrade():
     # 1. Alter User table - add mobile and increase password_hash length
     op.add_column('user', sa.Column('mobile', sa.String(length=15), nullable=True))
-    
+
     # Note: Changing column length requires more complex migration
     # For PostgreSQL, we can use:
     op.execute("ALTER TABLE \"user\" ALTER COLUMN password_hash TYPE VARCHAR(255)")
-    
+
     # 2. Re-hash existing passwords (CRITICAL SECURITY FIX)
     # This will re-hash the plain text passwords that are currently stored
     connection = op.get_bind()
     users = connection.execute(sa.text("SELECT id, password_hash FROM \"user\"")).fetchall()
-    
+
     for user in users:
         user_id, plain_password = user
         hashed_password = generate_password_hash(plain_password)
@@ -35,7 +35,7 @@ def upgrade():
             sa.text("UPDATE \"user\" SET password_hash = :hash WHERE id = :id"),
             {"hash": hashed_password, "id": user_id}
         )
-    
+
     # 3. Create Template table
     op.create_table('template',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -49,7 +49,7 @@ def upgrade():
         sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
-    
+
     # 4. Create LeadScore table
     op.create_table('lead_score',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -66,7 +66,7 @@ def upgrade():
         sa.UniqueConstraint('lead_id')
     )
     op.create_index('idx_lead_score_priority', 'lead_score', ['priority', 'score'], unique=False)
-    
+
     # 5. Create CallLog table
     op.create_table('call_log',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -84,27 +84,27 @@ def upgrade():
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index('idx_call_log_user_date', 'call_log', ['user_id', 'call_started_at'], unique=False)
-    
+
     # 6. Add performance indexes to existing tables
     op.create_index('idx_lead_creator_followup', 'lead', ['creator_id', 'followup_date'], unique=False)
     op.create_index('idx_lead_status', 'lead', ['status'], unique=False)
     op.create_index('idx_lead_mobile', 'lead', ['mobile'], unique=False)
     op.create_index('idx_lead_created_at', 'lead', ['created_at'], unique=False)
     op.create_index('idx_lead_modified_at', 'lead', ['modified_at'], unique=False)
-    
+
     op.create_index('idx_daily_followup_user_date', 'daily_followup_count', ['user_id', 'date'], unique=False)
     op.create_index('idx_worked_lead_user_date', 'worked_lead', ['user_id', 'work_date'], unique=False)
-    
+
     op.create_index('idx_unassigned_mobile', 'unassigned_lead', ['mobile'], unique=False)
     op.create_index('idx_unassigned_created', 'unassigned_lead', ['created_at'], unique=False)
-    
+
     op.create_index('idx_assignment_user_date', 'team_assignment', ['assigned_to_user_id', 'assigned_date'], unique=False)
     op.create_index('idx_assignment_status', 'team_assignment', ['status'], unique=False)
-    
+
     # 7. Insert default templates
     connection = op.get_bind()
     admin_user = connection.execute(sa.text("SELECT id FROM \"user\" WHERE is_admin = true LIMIT 1")).fetchone()
-    
+
     if admin_user:
         admin_id = admin_user[0]
         default_templates = [
@@ -119,7 +119,7 @@ def upgrade():
             ("Payment Discussed", "Discussed payment options. Customer prefers [payment_method].", "Negotiation"),
             ("Competitor Mentioned", "Customer comparing with [competitor_name].", "Competition"),
         ]
-        
+
         for title, content, category in default_templates:
             connection.execute(
                 sa.text("INSERT INTO template (title, content, category, is_global, created_by, usage_count, created_at) VALUES (:title, :content, :category, true, :created_by, 0, NOW())"),
@@ -140,13 +140,13 @@ def downgrade():
     op.drop_index('idx_lead_mobile', table_name='lead')
     op.drop_index('idx_lead_status', table_name='lead')
     op.drop_index('idx_lead_creator_followup', table_name='lead')
-    
+
     # Remove new tables
     op.drop_index('idx_call_log_user_date', table_name='call_log')
     op.drop_table('call_log')
     op.drop_index('idx_lead_score_priority', table_name='lead_score')
     op.drop_table('lead_score')
     op.drop_table('template')
-    
+
     # Revert user table changes (passwords will be lost - this is one-way)
     op.drop_column('user', 'mobile')

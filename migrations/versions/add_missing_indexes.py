@@ -21,19 +21,19 @@ def upgrade():
     with op.batch_alter_table('lead', schema=None) as batch_op:
         # Index for creator_id - critical for user filtering
         batch_op.create_index('idx_lead_creator_id', ['creator_id'], unique=False)
-        
+
         # Index for followup_date - critical for date-based dashboard queries
         batch_op.create_index('idx_lead_followup_date', ['followup_date'], unique=False)
-        
+
         # Index for status - used in quick stats and filtering
         batch_op.create_index('idx_lead_status', ['status'], unique=False)
-        
+
         # Compound index for the most common dashboard query pattern
         batch_op.create_index('idx_lead_creator_followup', ['creator_id', 'followup_date'], unique=False)
-        
+
         # Index for created_at - used for daily performance metrics
         batch_op.create_index('idx_lead_created_at', ['created_at'], unique=False)
-        
+
         # Compound index for performance calculations
         batch_op.create_index('idx_lead_creator_created', ['creator_id', 'created_at'], unique=False)
 
@@ -52,6 +52,6 @@ def downgrade():
         batch_op.drop_index('idx_lead_creator_followup')
         batch_op.drop_index('idx_lead_created_at')
         batch_op.drop_index('idx_lead_creator_created')
-    
+
     with op.batch_alter_table('daily_followup_count', schema=None) as batch_op:
-        batch_op.drop_index('idx_daily_followup_user_date') 
+        batch_op.drop_index('idx_daily_followup_user_date')

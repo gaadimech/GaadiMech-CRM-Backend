@@ -28,18 +28,18 @@ test_endpoint() {
     local expected_status=$3
     local description=$4
     local data=$5
-    
+
     echo -n "Testing $description... "
-    
+
     if [ -z "$data" ]; then
         response=$(curl -s -w "\n%{http_code}" -X $method "$BASE_URL$endpoint" -H "Content-Type: application/json")
     else
         response=$(curl -s -w "\n%{http_code}" -X $method "$BASE_URL$endpoint" -H "Content-Type: application/json" -d "$data")
     fi
-    
+
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
-    
+
     if [ "$http_code" == "$expected_status" ]; then
         echo -e "${GREEN}✓ PASS${NC} (HTTP $http_code)"
         ((PASSED++))

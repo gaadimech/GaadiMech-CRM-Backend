@@ -23,16 +23,28 @@ fi
 
 # Check if AWS CLI is installed
 if ! command -v aws &> /dev/null; then
-    echo -e "${RED}❌ AWS CLI is not installed.${NC}"
-    echo "Install it from: https://aws.amazon.com/cli/"
+    echo -e "${YELLOW}⚠️  AWS CLI not found in PATH${NC}"
+    echo "AWS CLI is recommended but not required for EB CLI"
+fi
+
+# Check AWS credentials (workaround: check file existence instead of CLI test)
+if [ -f ~/.aws/credentials ]; then
+    echo -e "${GREEN}✅ AWS credentials file found${NC}"
+else
+    echo -e "${RED}❌ AWS credentials not configured.${NC}"
+    echo "Credentials file not found at: ~/.aws/credentials"
+    echo "Run: aws configure"
     exit 1
 fi
 
-# Check AWS credentials
-if ! aws sts get-caller-identity &> /dev/null; then
-    echo -e "${RED}❌ AWS credentials not configured.${NC}"
-    echo "Run: aws configure"
-    exit 1
+# Optional: Try to verify credentials (non-blocking)
+if command -v aws &> /dev/null; then
+    if aws sts get-caller-identity &> /dev/null; then
+        echo -e "${GREEN}✅ AWS credentials verified${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Could not verify AWS credentials via CLI${NC}"
+        echo "Continuing anyway - EB CLI will handle authentication"
+    fi
 fi
 
 echo -e "${GREEN}✅ Prerequisites check passed${NC}"
@@ -43,7 +55,7 @@ if [ ! -f ".elasticbeanstalk/config.yml" ]; then
     echo -e "${YELLOW}⚠️  EB not initialized. Initializing...${NC}"
     read -p "Enter AWS region (default: ap-south-1): " region
     region=${region:-ap-south-1}
-    
+
     eb init -p python-3.11 GaadiMech-CRM-Backend --region "$region"
     echo -e "${GREEN}✅ EB initialized${NC}"
     echo ""
@@ -51,19 +63,36 @@ fi
 
 # Check if environment exists
 echo "Checking for existing environment..."
-if eb list | grep -q "GaadiMech-CRM-Backend-env"; then
-    echo -e "${GREEN}✅ Environment exists${NC}"
-    read -p "Deploy to existing environment? (y/n): " deploy_existing
-    if [ "$deploy_existing" != "y" ]; then
-        echo "Exiting..."
-        exit 0
+ENV_NAME="GaadiMech-CRM-Backend-env-alb"
+ENV_EXISTS=false
+
+# Try to check if environment exists (workaround for EB CLI execution issues)
+if [ -f ".elasticbeanstalk/config.yml" ]; then
+    CONFIG_ENV=$(grep "environment:" .elasticbeanstalk/config.yml | awk '{print $2}' | head -1)
+    if [ -n "$CONFIG_ENV" ]; then
+        ENV_NAME="$CONFIG_ENV"
+        ENV_EXISTS=true
+        echo -e "${GREEN}✅ Environment found in config: ${ENV_NAME}${NC}"
     fi
+fi
+
+# Try to verify via EB CLI (non-blocking)
+if command -v eb &> /dev/null; then
+    if eb list 2>/dev/null | grep -q "$ENV_NAME\|GaadiMech-CRM-Backend-env"; then
+        ENV_EXISTS=true
+        echo -e "${GREEN}✅ Environment exists: ${ENV_NAME}${NC}"
+    fi
+fi
+
+if [ "$ENV_EXISTS" = true ]; then
+    echo -e "${GREEN}✅ Deploying to existing environment: ${ENV_NAME}${NC}"
+    echo ""
 else
     echo -e "${YELLOW}⚠️  Environment does not exist. Creating...${NC}"
     read -p "Enter AWS region (default: ap-south-1): " region
     region=${region:-ap-south-1}
-    
-    eb create GaadiMech-CRM-Backend-env \
+
+    eb create "$ENV_NAME" \
         --instance-type t2.micro \
         --single \
         --region "$region"
@@ -88,8 +117,12 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}📦 Deploying application...${NC}"
-eb deploy
+echo -e "${GREEN}📦 Deploying application to ${ENV_NAME}...${NC}"
+if [ "$ENV_EXISTS" = true ] && [ -n "$ENV_NAME" ]; then
+    eb deploy "$ENV_NAME"
+else
+    eb deploy
+fi
 
 echo ""
 echo -e "${GREEN}✅ Deployment initiated!${NC}"

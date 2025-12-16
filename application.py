@@ -11,7 +11,7 @@ import sys
 import time as time_module
 from dotenv import load_dotenv
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address   
+from flask_limiter.util import get_remote_address
 from flask_migrate import Migrate
 from pytz import timezone
 import pytz
@@ -59,7 +59,7 @@ if IS_PRODUCTION:
          automatic_options=True)
 else:
     # In development, allow localhost origins with credentials
-    CORS(application, 
+    CORS(application,
          origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
          allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
@@ -200,17 +200,17 @@ def normalize_mobile_number(mobile):
     1. +91XXXXXXXXXX (13 characters: +91 + 10 digits)
     2. XXXXXXXXXX (10 digits)
     3. 91XXXXXXXXXX (12 digits: 91 + 10 digits)
-    
+
     Returns normalized mobile number (10 digits) or None if invalid.
     Accepts any 10-digit number to support old leads that may not follow
     the standard Indian mobile number format (starting with 6-9).
     """
     if not mobile:
         return None
-    
+
     # Remove all non-digit characters except +
     cleaned = re.sub(r'[^\d+]', '', str(mobile))
-    
+
     # Handle +91 format
     if cleaned.startswith('+91'):
         digits = cleaned[3:]  # Remove +91
@@ -224,7 +224,7 @@ def normalize_mobile_number(mobile):
     # Handle XXXXXXXXXX format (10 digits)
     elif len(cleaned) == 10:
         return cleaned
-    
+
     return None
 
 # Mobile mapping
@@ -257,7 +257,7 @@ class DailyFollowupCount(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     initial_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
-    
+
     __table_args__ = (db.UniqueConstraint('date', 'user_id', name='unique_daily_count'),)
 
 class Lead(db.Model):
@@ -293,7 +293,7 @@ class UnassignedLead(db.Model):
     remarks = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
+
     # Relationship to team assignments
     assignments = db.relationship('TeamAssignment', backref='unassigned_lead', lazy=True)
 
@@ -322,7 +322,7 @@ class TeamAssignment(db.Model):
     status = db.Column(db.String(20), nullable=False, default='Assigned')
     processed_at = db.Column(db.DateTime, nullable=True)
     added_to_crm = db.Column(db.Boolean, default=False)
-    
+
     # Relationships
     assigned_to = db.relationship('User', foreign_keys=[assigned_to_user_id], backref='assigned_leads')
     assigned_by_user = db.relationship('User', foreign_keys=[assigned_by])
@@ -344,10 +344,10 @@ class PushSubscription(db.Model):
     user_agent = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
     # Note: updated_at column doesn't exist in current DB structure
-    
+
     # Relationship
     user = db.relationship('User', backref='push_subscriptions')
-    
+
     __table_args__ = (
         db.UniqueConstraint('user_id', 'endpoint', name='unique_user_endpoint'),
     )
@@ -364,11 +364,11 @@ class WorkedLead(db.Model):
     old_followup_date = db.Column(db.DateTime, nullable=True)  # Previous followup date
     new_followup_date = db.Column(db.DateTime, nullable=False)  # New followup date
     worked_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
-    
+
     # Relationships
     lead = db.relationship('Lead', backref='worked_entries')
     user = db.relationship('User', backref='worked_leads')
-    
+
     __table_args__ = (
         db.Index('idx_worked_lead_user_date', 'user_id', 'work_date'),
     )
@@ -386,7 +386,7 @@ class Template(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     usage_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
-    
+
     creator = db.relationship('User', backref='templates')
 
 class LeadScore(db.Model):
@@ -398,17 +398,17 @@ class LeadScore(db.Model):
     lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=False, unique=True)
     score = db.Column(db.Integer, default=0)  # 0-100
     priority = db.Column(db.String(20), default='Medium')  # High, Medium, Low
-    
+
     # Score factors
     overdue_score = db.Column(db.Integer, default=0)
     status_score = db.Column(db.Integer, default=0)
     engagement_score = db.Column(db.Integer, default=0)
     recency_score = db.Column(db.Integer, default=0)
-    
+
     last_calculated = db.Column(db.DateTime, default=lambda: datetime.now(ist))
-    
+
     lead = db.relationship('Lead', backref='lead_score', uselist=False)
-    
+
     __table_args__ = (
         db.Index('idx_lead_score_priority', 'priority', 'score'),
     )
@@ -420,33 +420,33 @@ class CallLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=True)  # Nullable for non-lead calls
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
+
     # Call tracking fields
     call_sid = db.Column(db.String(100), unique=True, nullable=True)  # Call SID (for external call services)
     from_number = db.Column(db.String(20))  # Caller ID
     to_number = db.Column(db.String(20))  # User's number
     customer_number = db.Column(db.String(20))  # Customer's number
-    
+
     # Call metadata
     direction = db.Column(db.String(20), nullable=False, default='outbound')  # 'outbound', 'inbound'
     status = db.Column(db.String(30), nullable=False, default='initiated')  # 'initiated', 'ringing', 'answered', 'completed', 'failed', 'busy', 'no-answer'
     duration = db.Column(db.Integer, default=0)  # in seconds
     notes = db.Column(db.Text)
     recording_url = db.Column(db.String(500))  # URL to call recording if available
-    
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(pytz.UTC))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(pytz.UTC), onupdate=lambda: datetime.now(pytz.UTC))
-    
+
     # Legacy fields for backwards compatibility
     call_type = db.Column(db.String(20))  # Deprecated - use 'direction' instead
     call_status = db.Column(db.String(30))  # Deprecated - use 'status' instead
     call_started_at = db.Column(db.DateTime)  # Deprecated - use 'created_at' instead
     call_ended_at = db.Column(db.DateTime)  # Deprecated - use 'updated_at' instead
-    
+
     lead = db.relationship('Lead', backref='call_logs')
     user = db.relationship('User', backref='call_logs')
-    
+
     __table_args__ = (
         db.Index('idx_call_log_user_date', 'user_id', 'created_at'),
         db.Index('idx_call_log_lead', 'lead_id'),
@@ -460,14 +460,14 @@ class WhatsAppTemplate(db.Model):
     Users can select a template when clicking WhatsApp button, and it will be prefilled in the chat.
     """
     __tablename__ = 'whatsapp_template'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)  # Template name/identifier
     message = db.Column(db.Text, nullable=False)  # The actual message content
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
+
     creator = db.relationship('User', backref='whatsapp_templates')
 
 class CustomerNameCounter(db.Model):
@@ -477,7 +477,7 @@ class CustomerNameCounter(db.Model):
     Ensures unique sequential customer names across all users and sessions.
     """
     __tablename__ = 'customer_name_counter'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     counter = db.Column(db.Integer, nullable=False, default=0)
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
@@ -488,7 +488,7 @@ class TeleobiTemplateCache(db.Model):
     Stores template metadata including type (Utility/Marketing) and status.
     """
     __tablename__ = 'teleobi_template_cache'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     template_id = db.Column(db.String(100), nullable=False, unique=True)  # WhatsApp template ID
     teleobi_template_id = db.Column(db.String(50), nullable=True)  # Teleobi internal template ID (for sending)
@@ -503,7 +503,7 @@ class TeleobiTemplateCache(db.Model):
     phone_number_id = db.Column(db.String(100), nullable=False)
     synced_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
-    
+
     __table_args__ = (
         db.Index('idx_template_type', 'template_type'),
         db.Index('idx_template_status', 'status'),
@@ -516,7 +516,7 @@ class WhatsAppSend(db.Model):
     Used for monitoring, quality tracking, and delivery status.
     """
     __tablename__ = 'whatsapp_send'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=True)
     phone_number = db.Column(db.String(20), nullable=False)
@@ -534,11 +534,11 @@ class WhatsAppSend(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
-    
+
     # Relationships
     lead = db.relationship('Lead', backref='whatsapp_sends')
     creator = db.relationship('User', backref='whatsapp_sends')
-    
+
     __table_args__ = (
         db.Index('idx_whatsapp_send_status', 'status'),
         db.Index('idx_whatsapp_send_phone', 'phone_number'),
@@ -552,10 +552,11 @@ class WhatsAppBulkJob(db.Model):
     Track bulk messaging jobs for monitoring and management.
     """
     __tablename__ = 'whatsapp_bulk_job'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     job_name = db.Column(db.String(200), nullable=True)
     template_name = db.Column(db.String(200), nullable=False)
+    template_type = db.Column(db.String(20), nullable=True)  # Store template type for recovery
     total_recipients = db.Column(db.Integer, nullable=False, default=0)
     processed_count = db.Column(db.Integer, default=0)  # Messages processed so far
     sent_count = db.Column(db.Integer, default=0)
@@ -564,14 +565,16 @@ class WhatsAppBulkJob(db.Model):
     failed_count = db.Column(db.Integer, default=0)
     status = db.Column(db.String(50), nullable=False, default='pending')  # 'pending', 'processing', 'completed', 'failed', 'cancelled'
     filter_criteria = db.Column(db.JSON, nullable=True)  # Store filter criteria used
+    recipients = db.Column(db.JSON, nullable=True)  # Store recipients list for job recovery
+    variables = db.Column(db.JSON, nullable=True)  # Store template variables for job recovery
     started_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
-    
+
     creator = db.relationship('User', backref='whatsapp_bulk_jobs')
-    
+
     __table_args__ = (
         db.Index('idx_bulk_job_status', 'status'),
         db.Index('idx_bulk_job_created', 'created_at'),
@@ -592,11 +595,11 @@ def login():
         response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
         return response
-    
+
     # For GET requests, always serve Next.js frontend
     if request.method == 'GET':
         return serve_frontend()
-    
+
     # For POST requests, handle as API login
     try:
         if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
@@ -613,37 +616,37 @@ def login():
         else:
             username = request.form.get('username', '')
             password = request.form.get('password', '')
-        
+
         if not username or not password:
             return jsonify({'success': False, 'message': 'Username and password are required'}), 400
-        
+
         try:
             # Query user from database
             print(f"Attempting to query user: {username}")
             user = User.query.filter_by(username=username).first()
             print(f"User found: {user is not None}")
-            
+
             if not user:
                 print(f"User '{username}' not found in database")
                 return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
-            
+
             # Check password
             password_valid = user.check_password(password)
             print(f"Password valid: {password_valid}")
-            
+
             if not password_valid:
                 print(f"Invalid password for user '{username}'")
                 return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
-            
+
             # Login user
             login_user(user, remember=True)
             print(f"User '{username}' logged in successfully")
-            
+
             # Commit session if needed
             db.session.commit()
-            
+
             return jsonify({
-                'success': True, 
+                'success': True,
                 'message': 'Login successful',
                 'user': {
                     'id': user.id,
@@ -664,7 +667,7 @@ def login():
             else:
                 error_msg = 'An error occurred during login. Please try again.'
             return jsonify({'success': False, 'message': error_msg}), 500
-    
+
     # Default: serve Next.js frontend
     return serve_frontend()
 
@@ -681,7 +684,7 @@ def after_request(response):
             'http://localhost:3001',
             'http://127.0.0.1:3001'
         ]
-        
+
         if origin in allowed_origins or any(origin.startswith(orig) for orig in allowed_origins):
             # Don't override if Flask-CORS already set it
             if 'Access-Control-Allow-Origin' not in response.headers:
@@ -707,13 +710,13 @@ def open_whatsapp(mobile):
     cleaned_mobile = ''.join(filter(str.isdigit, mobile))
     if len(cleaned_mobile) == 10:
         cleaned_mobile = '91' + cleaned_mobile
-    
+
     user_agent = request.headers.get('User-Agent')
     if 'Mobile' in user_agent:
         whatsapp_url = f"whatsapp://send?phone={cleaned_mobile}"
     else:
         whatsapp_url = f"https://web.whatsapp.com/send?phone={cleaned_mobile}"
-    
+
     return jsonify({'url': whatsapp_url})
 
 
@@ -725,7 +728,7 @@ def call_history(lead_id):
     """
     try:
         calls = CallLog.query.filter_by(lead_id=lead_id).order_by(CallLog.created_at.desc()).all()
-        
+
         call_data = [{
             'call_sid': call.call_sid,
             'status': call.status,
@@ -737,7 +740,7 @@ def call_history(lead_id):
             'created_at': call.created_at.isoformat() if call.created_at else None,
             'user_name': call.user.name if call.user else 'Unknown'
         } for call in calls]
-        
+
         return jsonify({
             'success': True,
             'calls': call_data
@@ -757,24 +760,24 @@ def call_stats():
     try:
         date_from = request.args.get('from', datetime.now().strftime('%Y-%m-%d'))
         date_to = request.args.get('to', datetime.now().strftime('%Y-%m-%d'))
-        
+
         # Parse dates
         from_date = datetime.strptime(date_from, '%Y-%m-%d')
         to_date = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
-        
+
         # Get call statistics
         calls = CallLog.query.filter(
             CallLog.user_id == current_user.id,
             CallLog.created_at >= from_date,
             CallLog.created_at < to_date
         ).all()
-        
+
         total_calls = len(calls)
         completed_calls = len([c for c in calls if c.status == 'completed'])
         failed_calls = len([c for c in calls if c.status in ['failed', 'busy', 'no-answer']])
         total_duration = sum([c.duration for c in calls if c.duration])
         avg_duration = total_duration / completed_calls if completed_calls > 0 else 0
-        
+
         return jsonify({
             'success': True,
             'stats': {
@@ -830,6 +833,85 @@ def health_check():
             'timestamp': datetime.now(ist).isoformat()
         }), 200
 
+@application.route('/api/admin/apply-migration', methods=['POST'])
+@login_required
+def apply_migration():
+    """Temporary endpoint to apply missing database migration
+    This adds the missing columns: recipients, variables, template_type
+    """
+    try:
+        # Check if user is admin
+        if not current_user or not current_user.is_admin:
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        from sqlalchemy import text
+        
+        with db.session.begin():
+            # Check if columns already exist
+            check_query = text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'whatsapp_bulk_job' 
+                AND column_name IN ('recipients', 'variables', 'template_type')
+            """)
+            existing_cols = [row[0] for row in db.session.execute(check_query)]
+            
+            results = []
+            
+            # Add recipients column
+            if 'recipients' not in existing_cols:
+                db.session.execute(text("""
+                    ALTER TABLE whatsapp_bulk_job 
+                    ADD COLUMN recipients JSONB
+                """))
+                results.append("✅ Added recipients column")
+            else:
+                results.append("✅ recipients column already exists")
+            
+            # Add variables column
+            if 'variables' not in existing_cols:
+                db.session.execute(text("""
+                    ALTER TABLE whatsapp_bulk_job 
+                    ADD COLUMN variables JSONB
+                """))
+                results.append("✅ Added variables column")
+            else:
+                results.append("✅ variables column already exists")
+            
+            # Add template_type column
+            if 'template_type' not in existing_cols:
+                db.session.execute(text("""
+                    ALTER TABLE whatsapp_bulk_job 
+                    ADD COLUMN template_type VARCHAR(20)
+                """))
+                results.append("✅ Added template_type column")
+            else:
+                results.append("✅ template_type column already exists")
+            
+            # Update alembic version
+            db.session.execute(text("""
+                UPDATE alembic_version 
+                SET version_num = 'a1b2c3d4e5f6' 
+                WHERE version_num != 'a1b2c3d4e5f6'
+            """))
+            results.append("✅ Updated alembic version to a1b2c3d4e5f6")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Migration applied successfully',
+            'results': results
+        }), 200
+        
+    except Exception as e:
+        print(f"Migration error: {e}")
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @application.route('/')
 def index():
     """Serve the Next.js frontend index page"""
@@ -846,10 +928,10 @@ def utc_to_ist(utc_dt):
 
 def get_initial_followup_count(user_id, date):
     daily_count = DailyFollowupCount.query.filter_by(
-        user_id=user_id, 
+        user_id=user_id,
         date=date
     ).first()
-    
+
     if daily_count:
         return daily_count.initial_count
     else:
@@ -860,13 +942,13 @@ def get_initial_followup_count(user_id, date):
         # Convert to UTC for database query (followup_date is stored in UTC)
         start_datetime_utc = start_datetime_ist.astimezone(pytz.UTC)
         end_datetime_utc = end_datetime_ist.astimezone(pytz.UTC)
-        
+
         current_count = Lead.query.filter(
             Lead.creator_id == user_id,
             Lead.followup_date >= start_datetime_utc,
             Lead.followup_date < end_datetime_utc
         ).count()
-        
+
         # Create record
         daily_count = DailyFollowupCount(
             user_id=user_id,
@@ -878,13 +960,13 @@ def get_initial_followup_count(user_id, date):
             db.session.commit()
         except:
             db.session.rollback()
-        
+
         return current_count
 
 def capture_daily_snapshot():
     """
     Capture daily snapshot of followup counts at 5AM IST - this fixes the day's workload.
-    
+
     This function:
     1. Counts all leads scheduled for today (followup_date = today) for each user
     2. Stores the initial_count in DailyFollowupCount table
@@ -894,24 +976,24 @@ def capture_daily_snapshot():
     try:
         snapshot_time = datetime.now(ist)
         print(f"🔄 [SCHEDULER] Starting daily snapshot at {snapshot_time.strftime('%Y-%m-%d %H:%M:%S IST')}")
-        
+
         # Get today's date in IST
         today = snapshot_time.date()
         today_start = ist.localize(datetime.combine(today, time.min))
         tomorrow_start = today_start + timedelta(days=1)
-        
+
         # Convert to UTC for database queries
         today_start_utc = today_start.astimezone(pytz.UTC)
         tomorrow_start_utc = tomorrow_start.astimezone(pytz.UTC)
-        
+
         print(f"📅 [SCHEDULER] Snapshot date: {today} (IST)")
         print(f"📅 [SCHEDULER] Time range: {today_start_utc} to {tomorrow_start_utc} (UTC)")
-        
+
         # Get all users
         users = User.query.all()
         total_followups = 0
         user_snapshots = []
-        
+
         for user in users:
             # Count leads scheduled for today for this user
             # This includes:
@@ -922,7 +1004,7 @@ def capture_daily_snapshot():
                 Lead.followup_date >= today_start_utc,
                 Lead.followup_date < tomorrow_start_utc
             ).count()
-            
+
             # Also count leads by status for better tracking
             status_breakdown = db.session.query(
                 Lead.status,
@@ -932,17 +1014,17 @@ def capture_daily_snapshot():
                 Lead.followup_date >= today_start_utc,
                 Lead.followup_date < tomorrow_start_utc
             ).group_by(Lead.status).all()
-            
+
             status_summary = {status: count for status, count in status_breakdown}
-            
+
             # Create or update the daily count record
             daily_count = DailyFollowupCount.query.filter_by(
                 user_id=user.id,
                 date=today
             ).first()
-            
+
             old_count = daily_count.initial_count if daily_count else None
-            
+
             if daily_count:
                 # Update existing record - always override with current snapshot
                 daily_count.initial_count = followup_count
@@ -956,7 +1038,7 @@ def capture_daily_snapshot():
                     created_at=snapshot_time
                 )
                 db.session.add(daily_count)
-            
+
             total_followups += followup_count
             user_snapshots.append({
                 'user': user.name,
@@ -964,18 +1046,18 @@ def capture_daily_snapshot():
                 'old_count': old_count,
                 'status_breakdown': status_summary
             })
-            
+
             change_indicator = f" (was {old_count})" if old_count is not None and old_count != followup_count else ""
             print(f"✅ [SCHEDULER] User {user.name}: {followup_count} followups fixed for {today}{change_indicator}")
             if status_summary:
                 print(f"   └─ Status breakdown: {status_summary}")
-        
+
         db.session.commit()
-        
+
         print(f"✅ [SCHEDULER] Daily snapshot completed successfully for {today}")
         print(f"📊 [SCHEDULER] Total followups across all users: {total_followups}")
         print(f"👥 [SCHEDULER] Users processed: {len(users)}")
-        
+
         return {
             'success': True,
             'date': today.isoformat(),
@@ -984,7 +1066,7 @@ def capture_daily_snapshot():
             'users_processed': len(users),
             'user_snapshots': user_snapshots
         }
-        
+
     except Exception as e:
         error_msg = f"❌ [SCHEDULER] Error in daily snapshot: {e}"
         print(error_msg)
@@ -1001,40 +1083,40 @@ def capture_daily_snapshot():
 def init_scheduler():
     """
     Initialize and start the background scheduler for daily snapshots.
-    
+
     The scheduler runs at 5:00 AM IST every day to:
     1. Capture initial followup counts for each user
     2. Store them in DailyFollowupCount table
     3. Fix the day's workload baseline for completion rate calculations
-    
+
     Note: In production with gunicorn (multiple workers), the scheduler will run
     in each worker. This is acceptable for this use case as the snapshot function
     is idempotent (can run multiple times safely).
     """
     # Check if we should run the scheduler
     enable_scheduler = os.getenv('ENABLE_SCHEDULER', 'true').lower() == 'true'
-    
+
     # Check if we're running under gunicorn (production)
     is_gunicorn = 'gunicorn' in os.environ.get('SERVER_SOFTWARE', '').lower() or \
                   'gunicorn' in ' '.join(sys.argv)
-    
+
     print(f"🔧 [SCHEDULER] Initialization check:")
     print(f"   ENABLE_SCHEDULER={enable_scheduler}")
     print(f"   Running under gunicorn: {is_gunicorn}")
-    
+
     if is_gunicorn and not enable_scheduler:
         print("ℹ️  [SCHEDULER] Scheduler disabled in gunicorn mode (set ENABLE_SCHEDULER=true to enable)")
         print("   Consider using a separate scheduler process or cron job for production")
         return None
-    
+
     if not enable_scheduler:
         print("ℹ️  [SCHEDULER] Scheduler disabled via ENABLE_SCHEDULER=false")
         print("   Daily snapshot will need to be triggered manually via /api/trigger-snapshot")
         return None
-    
+
     try:
         scheduler = BackgroundScheduler(timezone=ist)
-        
+
         # Calculate next run time for display
         now_ist = datetime.now(ist)
         today_5am = ist.localize(datetime.combine(now_ist.date(), time(5, 0)))
@@ -1044,7 +1126,7 @@ def init_scheduler():
         else:
             # Next run is today at 5 AM
             next_run = today_5am
-        
+
         scheduler.add_job(
             func=capture_daily_snapshot,
             trigger=CronTrigger(hour=5, minute=0, timezone=ist),  # 5:00 AM IST daily
@@ -1053,13 +1135,13 @@ def init_scheduler():
             replace_existing=True
         )
         scheduler.start()
-        
+
         print("✅ [SCHEDULER] Daily snapshot scheduler started successfully")
         print(f"   ⏰ Scheduled to run daily at 5:00 AM IST")
         print(f"   📅 Next run: {next_run.strftime('%Y-%m-%d %H:%M:%S IST')}")
         print(f"   ⏳ Time until next run: {next_run - now_ist}")
         print(f"   📊 This will capture initial followup counts for completion rate tracking")
-        
+
         return scheduler
     except Exception as e:
         print(f"⚠️  [SCHEDULER] Failed to start scheduler: {e}")
@@ -1076,14 +1158,14 @@ def record_worked_lead(lead_id, user_id, old_followup_date, new_followup_date):
     try:
         # Get today's date in IST
         today = datetime.now(ist).date()
-        
+
         # Check if we already have a record for this lead on this day
         existing_record = WorkedLead.query.filter_by(
             lead_id=lead_id,
             user_id=user_id,
             work_date=today
         ).first()
-        
+
         if not existing_record:
             # Create new worked lead record
             worked_lead = WorkedLead(
@@ -1103,7 +1185,7 @@ def record_worked_lead(lead_id, user_id, old_followup_date, new_followup_date):
             existing_record.worked_at = datetime.now(ist)
             db.session.commit()
             print(f"Updated worked lead: Lead {lead_id} by User {user_id} on {today}")
-        
+
     except Exception as e:
         print(f"Error recording worked lead: {e}")
         db.session.rollback()
@@ -1121,7 +1203,7 @@ def get_worked_leads_for_date(user_id, date):
         # Convert to UTC for database query (old_followup_date is stored in UTC)
         date_start_utc = date_start_ist.astimezone(pytz.UTC)
         date_end_utc = date_end_ist.astimezone(pytz.UTC)
-        
+
         # Count only worked leads where:
         # 1. The work was done on the target date (work_date = date)
         # 2. The lead's old_followup_date was on the target date (was part of initial assignment)
@@ -1161,7 +1243,7 @@ def add_lead():
         'crm.gaadimech.com' in request.headers.get('Referer', '') or
         'localhost:3000' in request.headers.get('Origin', '')
     )
-    
+
     try:
         customer_name = request.form.get('customer_name')
         mobile = request.form.get('mobile')
@@ -1205,16 +1287,16 @@ def add_lead():
             created_at=datetime.now(ist),
             modified_at=datetime.now(ist)
         )
-        
+
         db.session.add(new_lead)
         db.session.commit()
-        
+
         # Clear any cached queries to ensure dashboard gets fresh data
         db.session.expire_all()
-        
+
         if is_api_request:
             return jsonify({'success': True, 'message': 'Lead added successfully!', 'lead_id': new_lead.id}), 200
-        
+
         flash('Lead added successfully!', 'success')
     except Exception as e:
         db.session.rollback()
@@ -1223,7 +1305,7 @@ def add_lead():
         if is_api_request:
             return jsonify({'success': False, 'error': 'Error adding lead. Please try again.'}), 500
         flash('Error adding lead. Please try again.', 'error')
-    
+
     # For non-API requests (old template), return redirect
     return redirect(url_for('index'))
 
@@ -1231,17 +1313,17 @@ def add_lead():
 @login_required
 def edit_lead(lead_id):
     lead = Lead.query.get_or_404(lead_id)
-    
+
     # Check permissions
     if not current_user.is_admin and lead.creator_id != current_user.id:
         flash('Permission denied', 'error')
         return redirect(url_for('followups'))
-    
+
     if request.method == 'POST':
         try:
             # Store old followup date for tracking
             old_followup_date = lead.followup_date
-            
+
             lead.customer_name = request.form.get('customer_name')
             # Normalize mobile number
             mobile = request.form.get('mobile')
@@ -1255,29 +1337,29 @@ def edit_lead(lead_id):
             lead.car_model = request.form.get('car_model')
             lead.remarks = request.form.get('remarks')
             lead.status = request.form.get('status')
-            
+
             # Handle followup date
             followup_date = datetime.strptime(request.form.get('followup_date'), '%Y-%m-%d')
             new_followup_date = ist.localize(followup_date)
             lead.followup_date = new_followup_date
             lead.modified_at = datetime.now(ist)
-            
+
             db.session.commit()
-            
+
             # Record that this lead has been worked upon only if followup date changed
             if old_followup_date != new_followup_date:
                 record_worked_lead(lead.id, current_user.id, old_followup_date, new_followup_date)
-            
+
             # Clear any cached queries to ensure dashboard gets fresh data
             db.session.expire_all()
-            
+
             flash('Lead updated successfully!', 'success')
             return redirect(url_for('followups'))
         except Exception as e:
             db.session.rollback()
             flash('Error updating lead', 'error')
             print(f"Error updating lead: {str(e)}")
-    
+
     return render_template('edit_lead.html', lead=lead)
 
 @application.route('/delete_lead/<int:lead_id>', methods=['POST'])
@@ -1285,20 +1367,20 @@ def edit_lead(lead_id):
 def delete_lead(lead_id):
     try:
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions - only admin or creator can delete
         if not current_user.is_admin and lead.creator_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'})
-        
+
         # Delete the lead
         db.session.delete(lead)
         db.session.commit()
-        
+
         # Clear any cached queries to ensure dashboard gets fresh data
         db.session.expire_all()
-        
+
         return jsonify({'success': True, 'message': 'Lead deleted successfully'})
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error deleting lead: {str(e)}")
@@ -1311,22 +1393,22 @@ def update_lead_status():
         data = request.get_json()
         lead_id = data.get('lead_id')
         new_status = data.get('status')
-        
+
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions
         if not current_user.is_admin and lead.creator_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'})
-        
+
         lead.status = new_status
         lead.modified_at = datetime.now(ist)
         db.session.commit()
-        
+
         # Clear any cached queries to ensure dashboard gets fresh data
         db.session.expire_all()
-        
+
         return jsonify({'success': True, 'message': 'Status updated successfully'})
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error updating status: {str(e)}")
@@ -1340,16 +1422,16 @@ def add_quick_followup():
         lead_id = data.get('lead_id')
         followup_date = data.get('followup_date')
         remarks = data.get('remarks', '')
-        
+
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions
         if not current_user.is_admin and lead.creator_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'})
-        
+
         # Store old followup date for tracking
         old_followup_date = lead.followup_date
-        
+
         # Update followup date
         followup_datetime = datetime.strptime(followup_date, '%Y-%m-%d')
         new_followup_date = ist.localize(followup_datetime)
@@ -1357,17 +1439,17 @@ def add_quick_followup():
         if remarks:
             lead.remarks = remarks
         lead.modified_at = datetime.now(ist)
-        
+
         db.session.commit()
-        
+
         # Record that this lead has been worked upon
         record_worked_lead(lead_id, current_user.id, old_followup_date, new_followup_date)
-        
+
         # Clear any cached queries to ensure dashboard gets fresh data
         db.session.expire_all()
-        
+
         return jsonify({'success': True, 'message': 'Followup scheduled successfully'})
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error scheduling followup: {str(e)}")
@@ -1379,7 +1461,7 @@ def trigger_manual_snapshot():
     """Manual trigger for daily snapshot - useful for testing or emergency fixes"""
     if not current_user.is_admin:
         return jsonify({'success': False, 'message': 'Admin access required'})
-    
+
     try:
         result = capture_daily_snapshot()
         if result.get('success'):
@@ -1403,34 +1485,34 @@ def scheduler_status():
     """Check scheduler status and last snapshot information"""
     if not current_user.is_admin:
         return jsonify({'success': False, 'message': 'Admin access required'})
-    
+
     try:
         # Check if scheduler is enabled
         enable_scheduler = os.getenv('ENABLE_SCHEDULER', 'true').lower() == 'true'
-        
+
         # Get today's snapshot
         today = datetime.now(ist).date()
         today_snapshot = DailyFollowupCount.query.filter_by(date=today).all()
-        
+
         # Get yesterday's snapshot for comparison
         yesterday = today - timedelta(days=1)
         yesterday_snapshot = DailyFollowupCount.query.filter_by(date=yesterday).all()
-        
+
         # Get most recent snapshot timestamp
         most_recent = DailyFollowupCount.query.order_by(
             DailyFollowupCount.created_at.desc()
         ).first()
-        
+
         # Check next scheduled run (5 AM IST tomorrow)
         tomorrow_5am = ist.localize(datetime.combine(today + timedelta(days=1), time(5, 0)))
         next_run = tomorrow_5am
-        
+
         # If it's before 5 AM today, next run is today at 5 AM
         now_ist = datetime.now(ist)
         today_5am = ist.localize(datetime.combine(today, time(5, 0)))
         if now_ist < today_5am:
             next_run = today_5am
-        
+
         status_data = {
             'scheduler_enabled': enable_scheduler,
             'current_time_ist': now_ist.strftime('%Y-%m-%d %H:%M:%S IST'),
@@ -1461,12 +1543,12 @@ def scheduler_status():
             'next_scheduled_run': next_run.strftime('%Y-%m-%d %H:%M:%S IST'),
             'time_until_next_run': str(next_run - now_ist) if next_run > now_ist else 'Past due'
         }
-        
+
         return jsonify({
             'success': True,
             'status': status_data
         })
-        
+
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1483,22 +1565,22 @@ def export_mobile_numbers():
         # Get query parameters
         selected_date = request.args.get('date', datetime.now(ist).strftime('%Y-%m-%d'))
         selected_user_id = request.args.get('user_id', '')
-        
+
         # Parse the selected date
         target_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
         target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
         target_end = target_start + timedelta(days=1)
-        
+
         # Convert to UTC for database queries
         target_start_utc = target_start.astimezone(pytz.UTC)
         target_end_utc = target_end.astimezone(pytz.UTC)
-        
+
         # Build query based on filters
         query = Lead.query.filter(
             Lead.followup_date >= target_start_utc,
             Lead.followup_date < target_end_utc
         )
-        
+
         # Apply user filter if specified
         if current_user.is_admin and selected_user_id:
             try:
@@ -1509,10 +1591,10 @@ def export_mobile_numbers():
         elif not current_user.is_admin:
             # Non-admin users can only see their own followups
             query = query.filter(Lead.creator_id == current_user.id)
-        
+
         # Get the followups
         followups = query.order_by(Lead.customer_name).all()
-        
+
         # Extract mobile numbers
         mobile_numbers = []
         for followup in followups:
@@ -1523,21 +1605,21 @@ def export_mobile_numbers():
                 'status': followup.status,
                 'created_by': followup.creator.name if followup.creator else 'Unknown'
             })
-        
+
         # Prepare CSV data
         csv_header = 'Mobile Number,Customer Name,Car Registration,Status,Created By\n'
         csv_data = csv_header
-        
+
         for item in mobile_numbers:
             csv_data += f"{item['mobile']},{item['customer_name']},{item['car_registration']},{item['status']},{item['created_by']}\n"
-        
+
         # Return response
         response = make_response(csv_data)
         response.headers['Content-Type'] = 'text/csv'
         response.headers['Content-Disposition'] = f'attachment; filename=mobile_numbers_{selected_date}.csv'
-        
+
         return response
-        
+
     except Exception as e:
         print(f"Error exporting mobile numbers: {e}")
         return jsonify({'success': False, 'message': f'Error: {str(e)}'})
@@ -1550,31 +1632,31 @@ def parse_customer_text_api():
         # Check if user is admin
         if not current_user.is_admin:
             return jsonify({'success': False, 'message': 'Access denied. Admin privileges required.'}), 403
-        
+
         # Get the text from request
         data = request.get_json()
         if not data or 'text' not in data:
             return jsonify({'success': False, 'message': 'No text provided'}), 400
-        
+
         text = data['text'].strip()
         if not text:
             return jsonify({'success': False, 'message': 'Empty text provided'}), 400
-        
+
         # Parse the text
         parsed_info = parse_customer_text(text)
-        
+
         # If customer name is missing, get the next default customer name from database
         if not parsed_info.get('customer_name') or not parsed_info['customer_name'].strip():
             default_name = get_next_default_customer_name()
             parsed_info['customer_name'] = default_name
-        
+
         # Return the parsed information
         return jsonify({
             'success': True,
             'data': parsed_info,
             'message': 'Text parsed successfully'
         })
-        
+
     except Exception as e:
         print(f"Error parsing customer text: {e}")
         return jsonify({'success': False, 'message': f'Error parsing text: {str(e)}'})
@@ -1587,15 +1669,15 @@ def get_next_customer_name():
         # Check if user is admin
         if not current_user.is_admin:
             return jsonify({'success': False, 'message': 'Access denied. Admin privileges required.'}), 403
-        
+
         default_name = get_next_default_customer_name()
-        
+
         return jsonify({
             'success': True,
             'customer_name': default_name,
             'message': 'Next customer name generated successfully'
         })
-        
+
     except Exception as e:
         print(f"Error getting next customer name: {e}")
         return jsonify({'success': False, 'message': f'Error generating customer name: {str(e)}'})
@@ -1610,25 +1692,25 @@ def get_next_default_customer_name():
         # This prevents race conditions when multiple users request names simultaneously
         # with_for_update() locks the row until the transaction completes
         counter_row = CustomerNameCounter.query.with_for_update().first()
-        
+
         if not counter_row:
             # First time - create the counter row
             counter_row = CustomerNameCounter(counter=0)
             db.session.add(counter_row)
             db.session.flush()  # Flush to get the ID
-        
+
         # Increment the counter atomically
         counter_row.counter += 1
         counter_row.updated_at = datetime.now(ist)
-        
+
         # Get the new counter value
         new_counter = counter_row.counter
-        
+
         # Commit the transaction
         db.session.commit()
-        
+
         return f"Customer {new_counter}"
-            
+
     except Exception as e:
         db.session.rollback()
         print(f"Error in get_next_default_customer_name: {e}")
@@ -1643,30 +1725,30 @@ def get_user_followup_numbers(user_id):
         # Check if user is admin
         if not current_user.is_admin:
             return jsonify({'success': False, 'message': 'Access denied. Admin privileges required.'}), 403
-        
+
         # Get the user
         user = User.query.get_or_404(user_id)
-        
+
         # Get user's mobile number from mapping
         user_mobile = USER_MOBILE_MAPPING.get(user.name, None)
-        
+
         if not user_mobile:
             return jsonify({'success': False, 'message': f'No mobile number found for {user.name}'})
-        
+
         # Get today's date
         today = datetime.now(ist).date()
         target_start = ist.localize(datetime.combine(today, datetime.min.time()))
         target_end = target_start + timedelta(days=1)
         target_start_utc = target_start.astimezone(pytz.UTC)
         target_end_utc = target_end.astimezone(pytz.UTC)
-        
+
         # Get user's followups for today
         followups = Lead.query.filter(
             Lead.creator_id == user_id,
             Lead.followup_date >= target_start_utc,
             Lead.followup_date < target_end_utc
         ).order_by(Lead.customer_name).all()
-        
+
         # Format followup data
         followup_data = []
         for followup in followups:
@@ -1677,7 +1759,7 @@ def get_user_followup_numbers(user_id):
                 'status': followup.status,
                 'remarks': followup.remarks or ''
             })
-        
+
         return jsonify({
             'success': True,
             'user_name': user.name,
@@ -1685,7 +1767,7 @@ def get_user_followup_numbers(user_id):
             'total_followups': len(followup_data),
             'followups': followup_data
         })
-        
+
     except Exception as e:
         print(f"Error getting user followup numbers: {e}")
         return jsonify({'success': False, 'message': f'Error: {str(e)}'})
@@ -1709,7 +1791,7 @@ def dashboard_old():
         # Get query parameters
         selected_date = request.args.get('date', datetime.now(ist).strftime('%Y-%m-%d'))
         selected_user_id = request.args.get('user_id', '')
-        
+
         # Parse the selected date
         try:
             target_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
@@ -1720,18 +1802,18 @@ def dashboard_old():
             target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
             target_end = target_start + timedelta(days=1)
             selected_date = target_date.strftime('%Y-%m-%d')
-        
+
         # Convert to UTC for database queries
         target_start_utc = target_start.astimezone(pytz.UTC)
         target_end_utc = target_end.astimezone(pytz.UTC)
-        
+
         # Get users based on permissions
         if current_user.is_admin:
             users = User.query.all()
         else:
             users = [current_user]
             selected_user_id = str(current_user.id)
-        
+
         # Base query setup with user filtering
         base_conditions = []
         if selected_user_id and current_user.is_admin:
@@ -1741,7 +1823,7 @@ def dashboard_old():
                 pass
         elif not current_user.is_admin:
             base_conditions.append(Lead.creator_id == current_user.id)
-        
+
         # Get current followups for the selected date
         current_followups_query = db.session.query(Lead).filter(
             Lead.followup_date >= target_start_utc,
@@ -1749,7 +1831,7 @@ def dashboard_old():
         )
         if base_conditions:
             current_followups_query = current_followups_query.filter(*base_conditions)
-        
+
         # Add status ordering: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did not Pick up > Dead Lead
         status_order = db.case(
             (Lead.status == 'New Lead', 0),
@@ -1763,7 +1845,7 @@ def dashboard_old():
             else_=8
         )
         current_followups = current_followups_query.order_by(status_order.asc(), Lead.followup_date.asc()).all()
-        
+
         # Convert followups to IST for display
         for followup in current_followups:
             if followup.followup_date:
@@ -1772,7 +1854,7 @@ def dashboard_old():
                 followup.created_at = utc_to_ist(followup.created_at)
             if followup.modified_at:
                 followup.modified_at = utc_to_ist(followup.modified_at)
-        
+
         # Get daily leads count
         daily_leads_count_query = db.session.query(db.func.count(Lead.id)).filter(
             Lead.created_at >= target_start_utc,
@@ -1780,50 +1862,50 @@ def dashboard_old():
         )
         if base_conditions:
             daily_leads_count_query = daily_leads_count_query.filter(*base_conditions)
-        
+
         daily_leads_count = daily_leads_count_query.scalar() or 0
-        
+
         # Get status counts
         status_counts_query = db.session.query(
             Lead.status,
             db.func.count(Lead.id)
         ).group_by(Lead.status)
-        
+
         if base_conditions:
             status_counts_query = status_counts_query.filter(*base_conditions)
-        
+
         status_counts = dict(status_counts_query.all())
-        
+
         # Get total leads count
         total_leads_query = db.session.query(db.func.count(Lead.id))
         if base_conditions:
             total_leads_query = total_leads_query.filter(*base_conditions)
-        
+
         total_leads = total_leads_query.scalar() or 0
-        
+
         # Calculate user performance
         user_performance_list = []
         for user in users:
             # Get user's followups for today
             user_followups = [f for f in current_followups if f.creator_id == user.id]
-            
+
             # Get initial followup count from 5AM snapshot
             initial_count = get_initial_followup_count(user.id, target_date)
-            
+
             # Get worked leads count for today
             worked_count = get_worked_leads_for_date(user.id, target_date)
-            
+
             # Calculate completion rate
             completion_rate = calculate_completion_rate(initial_count, worked_count)
-            
+
             # Calculate pending count
             pending_count = max(0, initial_count - worked_count)
-            
+
             # Get user's total leads
             user_total = db.session.query(db.func.count(Lead.id)).filter(
                 Lead.creator_id == user.id
             ).scalar() or 0
-            
+
             # Get user's status counts
             user_status_counts = dict(
                 db.session.query(
@@ -1833,14 +1915,14 @@ def dashboard_old():
                     Lead.creator_id == user.id
                 ).group_by(Lead.status).all()
             )
-            
+
             # Get new leads count for the selected date
             new_leads_count = db.session.query(db.func.count(Lead.id)).filter(
                 Lead.creator_id == user.id,
                 Lead.created_at >= target_start_utc,
                 Lead.created_at < target_end_utc
             ).scalar() or 0
-            
+
             user_performance_list.append({
                 'user': user,
                 'initial_followups': initial_count,
@@ -1848,7 +1930,7 @@ def dashboard_old():
                 'worked_followups': worked_count,
                 'completion_rate': completion_rate,
                 'leads_created': user_total,
-             
+
                 'completed': user_status_counts.get('Completed', 0),
                 'assigned': initial_count,
                 'worked': worked_count,
@@ -1856,15 +1938,15 @@ def dashboard_old():
                 'new_additions': new_leads_count,  # Update with actual new leads count
                 'original_assignment': initial_count
             })
-        
+
         # Sort by completion rate
         user_performance_list.sort(key=lambda x: (x['completion_rate'], x['initial_followups']), reverse=True)
-        
+
         # Calculate overall metrics
         total_initial_count = sum(perf['initial_followups'] for perf in user_performance_list)
         total_worked_count = sum(perf['worked_followups'] for perf in user_performance_list)
         overall_completion_rate = calculate_completion_rate(total_initial_count, total_worked_count)
-        
+
         return render_template('dashboard.html',
             todays_followups=current_followups,
             daily_leads_count=daily_leads_count,
@@ -1881,7 +1963,7 @@ def dashboard_old():
             current_pending_count=len(current_followups),
             USER_MOBILE_MAPPING=USER_MOBILE_MAPPING
         )
-        
+
     except Exception as e:
         print(f"Dashboard error: {str(e)}")
         flash('Dashboard temporarily unavailable. Please try again.', 'error')
@@ -1892,14 +1974,14 @@ def dashboard_old():
 def get_followup_details(lead_id):
     try:
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions
         if not current_user.is_admin and lead.creator_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'})
-        
+
         # Convert followup date to IST for display
         followup_date = utc_to_ist(lead.followup_date) if lead.followup_date else None
-        
+
         return jsonify({
             'success': True,
             'customer_name': lead.customer_name,
@@ -1910,7 +1992,7 @@ def get_followup_details(lead_id):
             'status': lead.status,
             'remarks': lead.remarks
         })
-        
+
     except Exception as e:
         print(f"Error fetching followup details: {e}")
         return jsonify({'success': False, 'message': 'Error fetching followup details'})
@@ -1927,16 +2009,16 @@ def update_followup():
         followup_date = data.get('followup_date')
         status = data.get('status')
         remarks = data.get('remarks')
-        
+
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions
         if not current_user.is_admin and lead.creator_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'})
-        
+
         # Store old followup date for tracking
         old_followup_date = lead.followup_date
-        
+
         # Update lead details
         lead.customer_name = customer_name
         # Normalize mobile number
@@ -1946,27 +2028,27 @@ def update_followup():
                 return jsonify({'success': False, 'message': 'Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111'}), 400
             lead.mobile = normalized_mobile
         lead.car_registration = car_registration
-        
+
         # Update followup date
         followup_datetime = datetime.strptime(followup_date, '%Y-%m-%d')
         new_followup_date = ist.localize(followup_datetime)
         lead.followup_date = new_followup_date
-        
+
         lead.status = status
         lead.remarks = remarks
         lead.modified_at = datetime.now(ist)
-        
+
         db.session.commit()
-        
+
         # Record that this lead has been worked upon if followup date changed
         if old_followup_date != new_followup_date:
             record_worked_lead(lead_id, current_user.id, old_followup_date, new_followup_date)
-        
+
         # Clear any cached queries to ensure dashboard gets fresh data
         db.session.expire_all()
-        
+
         return jsonify({'success': True, 'message': 'Followup updated successfully'})
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error updating followup: {e}")
@@ -1985,36 +2067,36 @@ def api_followups_today():
         date_str = request.args.get('date', datetime.now(ist).strftime('%Y-%m-%d'))
         overdue_only = request.args.get('overdue_only', '0') == '1'
         user_id_param = request.args.get('user_id', '')
-        
+
         # Parse the date
         try:
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             target_date = datetime.now(ist).date()
-        
+
         # Create IST datetime range for the selected date
         # Start: selected date at 00:00:00 IST
         # End: selected date at 23:59:59.999 IST (next day 00:00:00 IST)
         target_start_ist = ist.localize(datetime.combine(target_date, datetime.min.time()))
         target_end_ist = target_start_ist + timedelta(days=1)
-        
+
         # Convert to UTC for database query
         # This ensures we get all followups that fall on the selected date in IST
         target_start_utc = target_start_ist.astimezone(pytz.UTC)
         target_end_utc = target_end_ist.astimezone(pytz.UTC)
-        
+
         # Debug logging
         print(f"Date filter - Selected: {date_str} ({target_date})")
         print(f"  IST range: {target_start_ist} to {target_end_ist}")
         print(f"  UTC range: {target_start_utc} to {target_end_utc}")
-        
+
         # Build query - filter by UTC range
         # This will correctly include all followups that fall on the selected date in IST
         query = Lead.query.filter(
             Lead.followup_date >= target_start_utc,
             Lead.followup_date < target_end_utc
         )
-        
+
         # Apply user filter
         if user_id_param and current_user.is_admin:
             try:
@@ -2023,7 +2105,7 @@ def api_followups_today():
                 pass
         elif not current_user.is_admin:
             query = query.filter(Lead.creator_id == current_user.id)
-        
+
         # Status priority order: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did Not Pick Up > Dead Lead
         status_order = db.case(
             (Lead.status == 'New Lead', 0),
@@ -2036,14 +2118,14 @@ def api_followups_today():
             (Lead.status == 'Dead Lead', 7),
             else_=8
         )
-        
+
         # Get leads - order by status priority first, then by followup_date ascending
         leads = query.order_by(status_order.asc(), Lead.followup_date.asc()).all()
-        
+
         # Convert to JSON format
         items = []
         now_utc = datetime.now(pytz.UTC)
-        
+
         for lead in leads:
             # Check if overdue - ensure both datetimes are timezone-aware
             if lead.followup_date:
@@ -2056,14 +2138,14 @@ def api_followups_today():
                 is_overdue = followup_date_aware < now_utc
             else:
                 is_overdue = False
-            
+
             # Skip if overdue_only filter is set and lead is not overdue
             if overdue_only and not is_overdue:
                 continue
-            
+
             # Get creator name
             creator_name = lead.creator.name if lead.creator else 'Unknown'
-            
+
             # Ensure followup_date is timezone-aware before converting to ISO
             followup_date_iso = None
             if lead.followup_date:
@@ -2073,7 +2155,7 @@ def api_followups_today():
                 else:
                     followup_date_aware = lead.followup_date
                 followup_date_iso = followup_date_aware.isoformat()
-            
+
             items.append({
                 'id': lead.id,
                 'customer_name': lead.customer_name,
@@ -2089,12 +2171,12 @@ def api_followups_today():
                 'modified_at': lead.modified_at.isoformat() if lead.modified_at else None,
                 'overdue': is_overdue
             })
-        
+
         return jsonify({
             'date': date_str,
             'items': items
         })
-        
+
     except Exception as e:
         print(f"Error in api_followups_today: {e}")
         import traceback
@@ -2109,17 +2191,17 @@ def api_dashboard_metrics():
         # Ensure database connection
         db.session.execute(db.text('SELECT 1'))
         date_str = request.args.get('date', datetime.now(ist).strftime('%Y-%m-%d'))
-        
+
         try:
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             target_date = datetime.now(ist).date()
-        
+
         target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
         target_end = target_start + timedelta(days=1)
         target_start_utc = target_start.astimezone(pytz.UTC)
         target_end_utc = target_end.astimezone(pytz.UTC)
-        
+
         # Get user_id filter (only for admins)
         user_id_param = request.args.get('user_id', '')
         filter_user_id = None
@@ -2128,7 +2210,7 @@ def api_dashboard_metrics():
                 filter_user_id = int(user_id_param)
             except ValueError:
                 pass
-        
+
         # Base conditions for user filtering
         base_conditions = []
         if filter_user_id:
@@ -2137,7 +2219,7 @@ def api_dashboard_metrics():
         elif not current_user.is_admin:
             # Non-admin sees only their own data
             base_conditions.append(Lead.creator_id == current_user.id)
-        
+
         # Today's followups count - current count of leads with followup_date = target_date
         # Note: This shows leads that CURRENTLY have today's date, which may be less than
         # the initial assignment if leads have been worked on and moved to different dates
@@ -2148,7 +2230,7 @@ def api_dashboard_metrics():
         if base_conditions:
             todays_followups_query = todays_followups_query.filter(*base_conditions)
         todays_followups = todays_followups_query.scalar() or 0
-        
+
         # Pending followups (status not Completed/Confirmed/Dead Lead)
         pending_query = db.session.query(db.func.count(Lead.id)).filter(
             Lead.followup_date >= target_start_utc,
@@ -2158,7 +2240,7 @@ def api_dashboard_metrics():
         if base_conditions:
             pending_query = pending_query.filter(*base_conditions)
         pending_followups = pending_query.scalar() or 0
-        
+
         # Initial assignment (from daily snapshot taken at 5AM IST)
         # This is a fixed snapshot of how many leads were scheduled for this date at the start of the day
         # The difference between initial_assignment and todays_followups represents leads that have been
@@ -2170,16 +2252,16 @@ def api_dashboard_metrics():
             users = User.query.all()
         else:
             users = [current_user]
-        
+
         total_initial_count = 0
         total_worked_count = 0
-        
+
         for user in users:
             initial_count = get_initial_followup_count(user.id, target_date)
             worked_count = get_worked_leads_for_date(user.id, target_date)
             total_initial_count += initial_count
             total_worked_count += worked_count
-        
+
         # New leads today
         new_leads_query = db.session.query(db.func.count(Lead.id)).filter(
             Lead.created_at >= target_start_utc,
@@ -2188,10 +2270,10 @@ def api_dashboard_metrics():
         if base_conditions:
             new_leads_query = new_leads_query.filter(*base_conditions)
         new_leads_today = new_leads_query.scalar() or 0
-        
+
         # Completion rate
         completion_rate = calculate_completion_rate(total_initial_count, total_worked_count)
-        
+
         # Team leads statistics (for non-admin users, show their own assigned leads)
         team_leads_stats = {
             'total_assigned': 0,
@@ -2199,12 +2281,12 @@ def api_dashboard_metrics():
             'contacted': 0,
             'added_to_crm': 0
         }
-        
+
         # Get team leads for the selected date
         team_leads_query = TeamAssignment.query.filter(
             TeamAssignment.assigned_date == target_date
         )
-        
+
         # Filter by user if not admin
         if not current_user.is_admin:
             team_leads_query = team_leads_query.filter(
@@ -2214,13 +2296,13 @@ def api_dashboard_metrics():
             team_leads_query = team_leads_query.filter(
                 TeamAssignment.assigned_to_user_id == filter_user_id
             )
-        
+
         team_assignments = team_leads_query.all()
         team_leads_stats['total_assigned'] = len(team_assignments)
         team_leads_stats['pending'] = sum(1 for a in team_assignments if not a.added_to_crm)
         team_leads_stats['contacted'] = sum(1 for a in team_assignments if a.status == 'Contacted')
         team_leads_stats['added_to_crm'] = sum(1 for a in team_assignments if a.added_to_crm)
-        
+
         return jsonify({
             'todays_followups': todays_followups,
             'initial_assignment': total_initial_count,
@@ -2230,7 +2312,7 @@ def api_dashboard_metrics():
             'pending_followups': pending_followups,
             'team_leads': team_leads_stats
         })
-        
+
     except Exception as e:
         print(f"Error in api_dashboard_metrics: {e}")
         import traceback
@@ -2243,17 +2325,17 @@ def api_dashboard_team_performance():
     """Get team performance data for a specific date"""
     try:
         date_str = request.args.get('date', datetime.now(ist).strftime('%Y-%m-%d'))
-        
+
         try:
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             target_date = datetime.now(ist).date()
-        
+
         target_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
         target_end = target_start + timedelta(days=1)
         target_start_utc = target_start.astimezone(pytz.UTC)
         target_end_utc = target_end.astimezone(pytz.UTC)
-        
+
         # Get user_id filter (only for admins)
         user_id_param = request.args.get('user_id', '')
         filter_user_id = None
@@ -2262,7 +2344,7 @@ def api_dashboard_team_performance():
                 filter_user_id = int(user_id_param)
             except ValueError:
                 pass
-        
+
         # Get users based on permissions and filter
         if filter_user_id:
             # Admin filtering by specific user
@@ -2271,29 +2353,29 @@ def api_dashboard_team_performance():
             users = User.query.all()
         else:
             users = [current_user]
-        
+
         team_performance = []
-        
+
         for user in users:
             # Get initial followup count
             initial_count = get_initial_followup_count(user.id, target_date)
-            
+
             # Get worked leads count
             worked_count = get_worked_leads_for_date(user.id, target_date)
-            
+
             # Calculate pending
             pending_count = max(0, initial_count - worked_count)
-            
+
             # Calculate completion rate
             completion_rate = calculate_completion_rate(initial_count, worked_count)
-            
+
             # Get new leads count
             new_leads_count = db.session.query(db.func.count(Lead.id)).filter(
                 Lead.creator_id == user.id,
                 Lead.created_at >= target_start_utc,
                 Lead.created_at < target_end_utc
             ).scalar() or 0
-            
+
             team_performance.append({
                 'id': user.id,
                 'name': user.name,
@@ -2303,12 +2385,12 @@ def api_dashboard_team_performance():
                 'completion_rate': completion_rate,
                 'new_leads': new_leads_count
             })
-        
+
         # Sort by assigned in descending order
         team_performance.sort(key=lambda x: x['assigned'], reverse=True)
-        
+
         return jsonify(team_performance)
-        
+
     except Exception as e:
         print(f"Error in api_dashboard_team_performance: {e}")
         return jsonify({'error': str(e)}), 500
@@ -2329,10 +2411,10 @@ def api_followups():
         user_id = request.args.get('user_id', '')
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 50, type=int)
-        
+
         # Start with base query
         query = Lead.query
-        
+
         # Apply user filter based on permissions
         if current_user.is_admin and user_id:
             try:
@@ -2341,7 +2423,7 @@ def api_followups():
                 pass
         elif not current_user.is_admin:
             query = query.filter(Lead.creator_id == current_user.id)
-        
+
         # Apply date filters
         if date:
             try:
@@ -2352,17 +2434,17 @@ def api_followups():
                 # Convert to UTC for database query
                 target_start_utc = target_start.astimezone(pytz.UTC)
                 target_end_utc = target_end.astimezone(pytz.UTC)
-                
+
                 # Debug logging
                 print(f"API followups date filter - Selected: {date}, IST range: {target_start} to {target_end}, UTC range: {target_start_utc} to {target_end_utc}")
-                
+
                 query = query.filter(
                     Lead.followup_date >= target_start_utc,
                     Lead.followup_date < target_end_utc
                 )
             except ValueError:
                 pass
-        
+
         if created_date:
             try:
                 target_date = datetime.strptime(created_date, '%Y-%m-%d').date()
@@ -2376,7 +2458,7 @@ def api_followups():
                 )
             except ValueError:
                 pass
-        
+
         if modified_date:
             try:
                 target_date = datetime.strptime(modified_date, '%Y-%m-%d').date()
@@ -2390,17 +2472,17 @@ def api_followups():
                 )
             except ValueError:
                 pass
-        
+
         # Apply other filters
         if car_registration:
             query = query.filter(Lead.car_registration.ilike(f'%{car_registration}%'))
-        
+
         if mobile:
             query = query.filter(Lead.mobile.ilike(f'%{mobile}%'))
-        
+
         if status:
             query = query.filter(Lead.status == status)
-        
+
         if search:
             query = query.filter(
                 db.or_(
@@ -2411,7 +2493,7 @@ def api_followups():
                     Lead.remarks.ilike(f'%{search}%')
                 )
             )
-        
+
         # Status priority order: New Lead > Feedback > Confirmed > Open > Completed > Needs Followup > Did Not Pick Up > Dead Lead
         status_order = db.case(
             (Lead.status == 'New Lead', 0),
@@ -2424,17 +2506,17 @@ def api_followups():
             (Lead.status == 'Dead Lead', 7),
             else_=8
         )
-        
+
         # Paginate - order by status priority first, then by followup_date ascending (earliest first)
         pagination = query.order_by(status_order.asc(), Lead.followup_date.asc()).paginate(
             page=page, per_page=per_page, error_out=False
         )
-        
+
         # Convert to JSON
         leads = []
         for lead in pagination.items:
             creator_name = lead.creator.name if lead.creator else 'Unknown'
-            
+
             # Ensure followup_date is timezone-aware before converting to ISO
             followup_date_iso = None
             if lead.followup_date:
@@ -2444,7 +2526,7 @@ def api_followups():
                 else:
                     followup_date_aware = lead.followup_date
                 followup_date_iso = followup_date_aware.isoformat()
-            
+
             leads.append({
                 'id': lead.id,
                 'customer_name': lead.customer_name,
@@ -2459,7 +2541,7 @@ def api_followups():
                 'created_at': lead.created_at.isoformat() if lead.created_at else None,
                 'modified_at': lead.modified_at.isoformat() if lead.modified_at else None
             })
-        
+
         return jsonify({
             'leads': leads,
             'total_pages': pagination.pages,
@@ -2467,7 +2549,7 @@ def api_followups():
             'per_page': per_page,
             'total': pagination.total
         })
-        
+
     except Exception as e:
         print(f"Error in api_followups: {e}")
         return jsonify({'error': str(e)}), 500
@@ -2478,13 +2560,13 @@ def api_get_followup(lead_id):
     """Get a single followup/lead by ID"""
     try:
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions
         if not current_user.is_admin and lead.creator_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'}), 403
-        
+
         creator_name = lead.creator.name if lead.creator else 'Unknown'
-        
+
         # Ensure followup_date is timezone-aware before converting to ISO
         followup_date_iso = None
         if lead.followup_date:
@@ -2494,7 +2576,7 @@ def api_get_followup(lead_id):
             else:
                 followup_date_aware = lead.followup_date
             followup_date_iso = followup_date_aware.isoformat()
-        
+
         lead_data = {
             'id': lead.id,
             'customer_name': lead.customer_name,
@@ -2509,12 +2591,12 @@ def api_get_followup(lead_id):
             'created_at': lead.created_at.isoformat() if lead.created_at else None,
             'modified_at': lead.modified_at.isoformat() if lead.modified_at else None
         }
-        
+
         return jsonify({
             'success': True,
             'lead': lead_data
         })
-        
+
     except Exception as e:
         print(f"Error fetching followup: {e}")
         return jsonify({'success': False, 'message': 'Error fetching followup'}), 500
@@ -2525,13 +2607,13 @@ def api_update_followup(lead_id):
     """Update a followup/lead"""
     try:
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions
         if not current_user.is_admin and lead.creator_id != current_user.id:
             return jsonify({'error': 'Permission denied'}), 403
-        
+
         data = request.get_json()
-        
+
         # Update fields
         if 'customer_name' in data:
             lead.customer_name = data['customer_name']
@@ -2558,21 +2640,21 @@ def api_update_followup(lead_id):
                     # Fallback: try parsing ISO format
                     followup_dt = datetime.fromisoformat(data['followup_date'].replace('Z', '+00:00'))
                     followup_date_only = followup_dt.date()
-                
+
                 # Create datetime at midnight IST for the selected date, then convert to UTC
                 followup_start = ist.localize(datetime.combine(followup_date_only, datetime.min.time()))
                 new_followup_date = followup_start.astimezone(pytz.UTC)
-                
+
                 # Always update to ensure the date is exactly as the user selected
                 lead.followup_date = new_followup_date
             except (ValueError, AttributeError) as e:
                 print(f"Error parsing followup_date: {e}")
                 # If parsing fails, don't update the date to avoid breaking existing data
                 pass
-        
+
         lead.modified_at = datetime.now(ist)
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'message': 'Lead updated successfully',
@@ -2587,7 +2669,7 @@ def api_update_followup(lead_id):
                 'modified_at': lead.modified_at.isoformat() if lead.modified_at else None,
             }
         })
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error updating followup: {e}")
@@ -2601,17 +2683,17 @@ def api_delete_followup(lead_id):
     """Delete a followup/lead"""
     try:
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions - only admin can delete
         if not current_user.is_admin:
             return jsonify({'error': 'Permission denied. Only admins can delete leads.'}), 403
-        
+
         # Delete the lead
         db.session.delete(lead)
         db.session.commit()
-        
+
         return jsonify({'success': True, 'message': 'Lead deleted successfully'})
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error deleting followup: {e}")
@@ -2630,12 +2712,12 @@ def api_user_current():
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin')
         return response
-    
+
     # Debug logging
     print(f"[DEBUG] /api/user/current called from origin: {request.headers.get('Origin')}")
     print(f"[DEBUG] Request method: {request.method}")
     print(f"[DEBUG] Has session cookie: {request.cookies.get('session') is not None}")
-    
+
     """Get current user info for admin check"""
     try:
         # Check if user is authenticated without redirecting
@@ -2643,7 +2725,7 @@ def api_user_current():
         try:
             if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
                 return jsonify({'error': 'Not authenticated'}), 401
-            
+
             return jsonify({
                 'id': current_user.id,
                 'username': current_user.username,
@@ -2673,7 +2755,7 @@ def api_whatsapp_templates():
         response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         templates = WhatsAppTemplate.query.order_by(WhatsAppTemplate.created_at.desc()).all()
         response = jsonify({
@@ -2706,12 +2788,12 @@ def api_create_whatsapp_template():
         response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         data = request.get_json()
         if not data or not data.get('name') or not data.get('message'):
             return jsonify({'error': 'Name and message are required'}), 400
-        
+
         template = WhatsAppTemplate(
             name=data['name'],
             message=data['message'],
@@ -2719,7 +2801,7 @@ def api_create_whatsapp_template():
         )
         db.session.add(template)
         db.session.commit()
-        
+
         response = jsonify({
             'success': True,
             'template': {
@@ -2752,26 +2834,26 @@ def api_update_whatsapp_template(template_id):
         response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         template = WhatsAppTemplate.query.get_or_404(template_id)
-        
+
         # Check permissions - only creator or admin can edit
         if template.created_by != current_user.id and not current_user.is_admin:
             return jsonify({'error': 'Permission denied'}), 403
-        
+
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-        
+
         if 'name' in data:
             template.name = data['name']
         if 'message' in data:
             template.message = data['message']
-        
+
         template.updated_at = datetime.now(ist)
         db.session.commit()
-        
+
         response = jsonify({
             'success': True,
             'template': {
@@ -2802,17 +2884,17 @@ def api_delete_whatsapp_template(template_id):
         response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         template = WhatsAppTemplate.query.get_or_404(template_id)
-        
+
         # Check permissions - only creator or admin can delete
         if template.created_by != current_user.id and not current_user.is_admin:
             return jsonify({'error': 'Permission denied'}), 403
-        
+
         db.session.delete(template)
         db.session.commit()
-        
+
         response = jsonify({'success': True, 'message': 'Template deleted successfully'})
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
@@ -2844,10 +2926,10 @@ def followups_old():
         mobile = request.args.get('mobile', '')
         status = request.args.get('status', '')
         search = request.args.get('search', '')
-        
+
         # Start with base query
         query = Lead.query
-        
+
         # Apply user filter based on permissions
         if current_user.is_admin and selected_user_id:
             try:
@@ -2858,7 +2940,7 @@ def followups_old():
         elif not current_user.is_admin:
             # Non-admin users can only see their own leads
             query = query.filter(Lead.creator_id == current_user.id)
-        
+
         # Apply date filters
         if selected_date:
             try:
@@ -2873,7 +2955,7 @@ def followups_old():
                 )
             except ValueError:
                 pass
-        
+
         if created_date:
             try:
                 target_date = datetime.strptime(created_date, '%Y-%m-%d').date()
@@ -2887,7 +2969,7 @@ def followups_old():
                 )
             except ValueError:
                 pass
-        
+
         if modified_date:
             try:
                 target_date = datetime.strptime(modified_date, '%Y-%m-%d').date()
@@ -2901,17 +2983,17 @@ def followups_old():
                 )
             except ValueError:
                 pass
-        
+
         # Apply other filters
         if car_registration:
             query = query.filter(Lead.car_registration.ilike(f'%{car_registration}%'))
-        
+
         if mobile:
             query = query.filter(Lead.mobile.ilike(f'%{mobile}%'))
-        
+
         if status:
             query = query.filter(Lead.status == status)
-        
+
         if search:
             query = query.filter(
                 db.or_(
@@ -2921,18 +3003,18 @@ def followups_old():
                     Lead.remarks.ilike(f'%{search}%')
                 )
             )
-        
+
         # Get all users for the dropdown
         users = User.query.all() if current_user.is_admin else [current_user]
-        
+
         # Get the followups with pagination
         page = request.args.get('page', 1, type=int)
         per_page = 100  # Show more results per page to see more leads
-        
+
         followups_pagination = query.order_by(Lead.followup_date.desc()).paginate(
             page=page, per_page=per_page, error_out=False
         )
-        
+
         # Convert followups to IST for display
         for followup in followups_pagination.items:
             if followup.followup_date:
@@ -2941,7 +3023,7 @@ def followups_old():
                 followup.created_at = utc_to_ist(followup.created_at)
             if followup.modified_at:
                 followup.modified_at = utc_to_ist(followup.modified_at)
-        
+
         return render_template('followups.html',
             followups=followups_pagination.items,
             followups_pagination=followups_pagination,
@@ -2956,7 +3038,7 @@ def followups_old():
             search=search,
             USER_MOBILE_MAPPING=USER_MOBILE_MAPPING
         )
-        
+
     except Exception as e:
         print(f"Followups error: {str(e)}")
         flash('Error loading followups. Please try again.', 'error')
@@ -2971,19 +3053,19 @@ def api_delete_unassigned_lead(lead_id):
     try:
         if not current_user.is_admin:
             return jsonify({'error': 'Admin access required'}), 403
-        
+
         # Get the unassigned lead
         lead = UnassignedLead.query.get_or_404(lead_id)
-        
+
         # Delete all team assignments for this lead first (cascade)
         TeamAssignment.query.filter_by(unassigned_lead_id=lead_id).delete()
-        
+
         # Delete the lead
         db.session.delete(lead)
         db.session.commit()
-        
+
         return jsonify({'success': True, 'message': 'Lead and all assignments deleted successfully'})
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error deleting unassigned lead: {str(e)}")
@@ -2995,13 +3077,13 @@ def api_admin_unassigned_leads():
     """Get unassigned leads for admin"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         search = request.args.get('search', '')
         created_date = request.args.get('created_date', '')
-        
+
         query = UnassignedLead.query
-        
+
         # Apply search filter
         if search:
             query = query.filter(
@@ -3012,7 +3094,7 @@ def api_admin_unassigned_leads():
                     UnassignedLead.car_model.ilike(f'%{search}%')
                 )
             )
-        
+
         # Apply date filter
         if created_date:
             try:
@@ -3021,17 +3103,17 @@ def api_admin_unassigned_leads():
                 end_date = start_date + timedelta(days=1)
                 start_date_utc = start_date.astimezone(pytz.UTC)
                 end_date_utc = end_date.astimezone(pytz.UTC)
-                
+
                 query = query.filter(
                     UnassignedLead.created_at >= start_date_utc,
                     UnassignedLead.created_at < end_date_utc
                 )
             except ValueError:
                 pass
-        
+
         # Get recent leads
         unassigned_leads = query.order_by(UnassignedLead.created_at.desc()).limit(100).all()
-        
+
         # Convert to JSON and collect assignment info
         leads = []
         for lead in unassigned_leads:
@@ -3039,7 +3121,7 @@ def api_admin_unassigned_leads():
             current_assignment = TeamAssignment.query.filter_by(
                 unassigned_lead_id=lead.id
             ).order_by(TeamAssignment.assigned_at.desc()).first()
-            
+
             assigned_to = None
             added_to_crm = False
             assigned_date = None
@@ -3052,7 +3134,7 @@ def api_admin_unassigned_leads():
                 # Format assigned_date in IST
                 if current_assignment.assigned_date:
                     assigned_date = current_assignment.assigned_date.strftime('%Y-%m-%d')
-            
+
             # Combine manufacturer and model for display
             combined_car_model = None
             if lead.car_manufacturer and lead.car_model:
@@ -3061,7 +3143,7 @@ def api_admin_unassigned_leads():
                 combined_car_model = lead.car_manufacturer
             elif lead.car_model:
                 combined_car_model = lead.car_model
-            
+
             # Format scheduled_date in IST
             scheduled_date_str = None
             if lead.scheduled_date:
@@ -3071,7 +3153,7 @@ def api_admin_unassigned_leads():
                 else:
                     scheduled_date_ist = ist.localize(scheduled_date)
                 scheduled_date_str = scheduled_date_ist.strftime('%Y-%m-%d')
-            
+
             leads.append({
                 'id': lead.id,
                 'mobile': lead.mobile,
@@ -3088,7 +3170,7 @@ def api_admin_unassigned_leads():
                 'assigned_date': assigned_date,
                 'assignment_id': assignment_id
             })
-        
+
         # Sort leads: pending (not added_to_crm) first, then added_to_crm, then no assignment
         # Within each group, sort by created_at desc (most recent first)
         leads.sort(key=lambda x: (
@@ -3103,17 +3185,17 @@ def api_admin_unassigned_leads():
         pending_leads = [l for l in leads if l.get('added_to_crm') is False]
         added_leads = [l for l in leads if l.get('added_to_crm') is True]
         unassigned_leads_list = [l for l in leads if l.get('added_to_crm') is None or l.get('added_to_crm') is not False and l.get('added_to_crm') is not True]
-        
+
         # Sort each group by created_at desc
         pending_leads.sort(key=lambda x: x.get('created_at') or '', reverse=True)
         added_leads.sort(key=lambda x: x.get('created_at') or '', reverse=True)
         unassigned_leads_list.sort(key=lambda x: x.get('created_at') or '', reverse=True)
-        
+
         # Combine: pending first, then added, then unassigned
         leads = pending_leads + added_leads + unassigned_leads_list
-        
+
         return jsonify({'leads': leads})
-        
+
     except Exception as e:
         print(f"Error in api_admin_unassigned_leads: {e}")
         return jsonify({'error': str(e)}), 500
@@ -3124,16 +3206,16 @@ def api_admin_unassigned_lead_details(lead_id):
     """Get detailed information about an unassigned lead including CRM details if added"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         # Get the unassigned lead
         lead = UnassignedLead.query.get_or_404(lead_id)
-        
+
         # Get current assignment
         current_assignment = TeamAssignment.query.filter_by(
             unassigned_lead_id=lead.id
         ).order_by(TeamAssignment.assigned_at.desc()).first()
-        
+
         # Format scheduled_date in IST
         scheduled_date_str = None
         if lead.scheduled_date:
@@ -3143,7 +3225,7 @@ def api_admin_unassigned_lead_details(lead_id):
             else:
                 scheduled_date_ist = ist.localize(scheduled_date)
             scheduled_date_str = scheduled_date_ist.strftime('%Y-%m-%d')
-        
+
         # Get CRM lead details if added to CRM
         crm_lead = None
         if current_assignment and current_assignment.added_to_crm:
@@ -3153,19 +3235,19 @@ def api_admin_unassigned_lead_details(lead_id):
                 mobile=lead.mobile,
                 creator_id=current_assignment.assigned_to_user_id
             ).order_by(Lead.created_at.desc()).all()
-            
+
             # Find the most recent one that was likely created from this assignment
             # (created around the same time as processed_at)
             if crm_leads:
                 # Get the one closest to processed_at time
                 if current_assignment.processed_at:
                     closest_lead = min(crm_leads, key=lambda l: abs(
-                        (l.created_at.replace(tzinfo=pytz.UTC) if l.created_at.tzinfo is None else l.created_at) - 
+                        (l.created_at.replace(tzinfo=pytz.UTC) if l.created_at.tzinfo is None else l.created_at) -
                         (current_assignment.processed_at.replace(tzinfo=pytz.UTC) if current_assignment.processed_at.tzinfo is None else current_assignment.processed_at)
                     ))
                 else:
                     closest_lead = crm_leads[0]
-                
+
                 # Format followup_date in IST
                 followup_date_str = None
                 if closest_lead.followup_date:
@@ -3175,7 +3257,7 @@ def api_admin_unassigned_lead_details(lead_id):
                     else:
                         followup_date_ist = pytz.UTC.localize(followup_date).astimezone(ist)
                     followup_date_str = followup_date_ist.strftime('%Y-%m-%d')
-                
+
                 crm_lead = {
                     'id': closest_lead.id,
                     'status': closest_lead.status,
@@ -3185,12 +3267,12 @@ def api_admin_unassigned_lead_details(lead_id):
                     'created_at': closest_lead.created_at.isoformat() if closest_lead.created_at else None,
                     'modified_at': closest_lead.modified_at.isoformat() if closest_lead.modified_at else None
                 }
-        
+
         # Format assigned_date in IST
         assigned_date_str = None
         if current_assignment and current_assignment.assigned_date:
             assigned_date_str = current_assignment.assigned_date.strftime('%Y-%m-%d')
-        
+
         return jsonify({
             'lead': {
                 'id': lead.id,
@@ -3212,7 +3294,7 @@ def api_admin_unassigned_lead_details(lead_id):
             },
             'crm_lead': crm_lead
         })
-        
+
     except Exception as e:
         print(f"Error in api_admin_unassigned_lead_details: {e}")
         return jsonify({'error': str(e)}), 500
@@ -3223,19 +3305,19 @@ def api_admin_team_members():
     """Get list of team members (non-admin users)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         # Get all non-admin users
         team_members = User.query.filter_by(is_admin=False).all()
-        
+
         members = [{
             'id': member.id,
             'name': member.name,
             'username': member.username
         } for member in team_members]
-        
+
         return jsonify({'members': members})
-        
+
     except Exception as e:
         print(f"Error in api_admin_team_members: {e}")
         return jsonify({'error': str(e)}), 500
@@ -3246,7 +3328,7 @@ def api_admin_download_leads_count():
     """Get count of leads matching filter criteria"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         # Get query parameters
         filter_type = request.args.get('filter_type', 'followup_date')  # 'created_date', 'followup_date', or 'date_range'
@@ -3254,10 +3336,10 @@ def api_admin_download_leads_count():
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
         user_ids = request.args.getlist('user_ids')  # Can be multiple user IDs
-        
+
         # Build base query
         query = Lead.query
-        
+
         # Apply date filters
         if filter_type == 'created_date' and date:
             try:
@@ -3301,7 +3383,7 @@ def api_admin_download_leads_count():
                 )
             except ValueError:
                 pass
-        
+
         # Apply user filter
         if user_ids:
             try:
@@ -3310,15 +3392,15 @@ def api_admin_download_leads_count():
                     query = query.filter(Lead.creator_id.in_(user_id_list))
             except ValueError:
                 pass
-        
+
         # Get count
         count = query.count()
-        
+
         return jsonify({
             'success': True,
             'count': count
         })
-        
+
     except Exception as e:
         print(f"Error in api_admin_download_leads_count: {e}")
         import traceback
@@ -3331,7 +3413,7 @@ def api_admin_download_leads_export():
     """Export leads as CSV with phone_number header"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         # Get query parameters
         filter_type = request.args.get('filter_type', 'followup_date')  # 'created_date', 'followup_date', or 'date_range'
@@ -3339,10 +3421,10 @@ def api_admin_download_leads_export():
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
         user_ids = request.args.getlist('user_ids')  # Can be multiple user IDs
-        
+
         # Build base query
         query = Lead.query
-        
+
         # Apply date filters
         if filter_type == 'created_date' and date:
             try:
@@ -3385,7 +3467,7 @@ def api_admin_download_leads_export():
                 )
             except ValueError:
                 pass
-        
+
         # Apply user filter
         if user_ids:
             try:
@@ -3394,24 +3476,24 @@ def api_admin_download_leads_export():
                     query = query.filter(Lead.creator_id.in_(user_id_list))
             except ValueError:
                 pass
-        
+
         # Get leads
         leads = query.order_by(Lead.created_at.desc()).all()
-        
+
         # Prepare CSV data with phone_number header
         csv_header = 'phone_number\n'
         csv_data = csv_header
-        
+
         # Extract unique phone numbers (in case of duplicates)
         phone_numbers = set()
         for lead in leads:
             if lead.mobile:
                 phone_numbers.add(lead.mobile)
-        
+
         # Add phone numbers to CSV
         for phone in sorted(phone_numbers):
             csv_data += f"{phone}\n"
-        
+
         # Generate filename based on filter type
         if filter_type == 'followup_date' and date:
             filename = f"FD-{date}.csv"
@@ -3421,14 +3503,14 @@ def api_admin_download_leads_export():
             filename = f"DR-{start_date}_to_{end_date}.csv"
         else:
             filename = "leads.csv"
-        
+
         # Return response
         response = make_response(csv_data)
         response.headers['Content-Type'] = 'text/csv; charset=utf-8'
         response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
+
         return response
-        
+
     except Exception as e:
         print(f"Error in api_admin_download_leads_export: {e}")
         import traceback
@@ -3441,7 +3523,7 @@ def get_all_users():
     """Get all users or create a new user (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     if request.method == 'POST':
         # Create new user
         try:
@@ -3450,19 +3532,19 @@ def get_all_users():
             name = data.get('name')
             password = data.get('password')
             is_admin = data.get('is_admin', False)
-            
+
             # Validation
             if not username or not name or not password:
                 return jsonify({'error': 'Username, name, and password are required'}), 400
-            
+
             if len(password) < 6:
                 return jsonify({'error': 'Password must be at least 6 characters long'}), 400
-            
+
             # Check if username already exists
             existing_user = User.query.filter_by(username=username).first()
             if existing_user:
                 return jsonify({'error': 'Username already exists'}), 400
-            
+
             # Create new user
             new_user = User(
                 username=username,
@@ -3472,7 +3554,7 @@ def get_all_users():
             new_user.set_password(password)
             db.session.add(new_user)
             db.session.commit()
-            
+
             return jsonify({
                 'success': True,
                 'message': f'User {username} created successfully',
@@ -3483,26 +3565,26 @@ def get_all_users():
                     'is_admin': new_user.is_admin
                 }
             }), 201
-            
+
         except Exception as e:
             db.session.rollback()
             print(f"Error creating user: {e}")
             return jsonify({'error': 'Failed to create user'}), 500
-    
+
     # GET request - return all users
     try:
         # Get all users
         all_users = User.query.order_by(User.id.asc()).all()
-        
+
         users = [{
             'id': user.id,
             'username': user.username,
             'name': user.name,
             'is_admin': user.is_admin
         } for user in all_users]
-        
+
         return jsonify({'users': users})
-        
+
     except Exception as e:
         print(f"Error fetching users: {e}")
         return jsonify({'error': 'Failed to fetch users'}), 500
@@ -3513,29 +3595,29 @@ def update_user_password(user_id):
     """Update a user's password (admin only, no old password required)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         data = request.get_json()
         new_password = data.get('new_password')
-        
+
         if not new_password:
             return jsonify({'error': 'New password is required'}), 400
-        
+
         if len(new_password) < 6:
             return jsonify({'error': 'Password must be at least 6 characters long'}), 400
-        
+
         # Get the user
         user = User.query.get_or_404(user_id)
-        
+
         # Update password using set_password method (hashes it automatically)
         user.set_password(new_password)
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'message': f'Password updated successfully for user {user.username}'
         })
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error updating password: {e}")
@@ -3547,7 +3629,7 @@ def api_admin_leads_manipulation_search():
     """Search and filter leads for manipulation (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         # Get query parameters
         date_from = request.args.get('date_from', '')
@@ -3555,10 +3637,10 @@ def api_admin_leads_manipulation_search():
         user_id = request.args.get('user_id', '')
         status = request.args.get('status', '')
         search = request.args.get('search', '')
-        
+
         # Start with base query
         query = Lead.query
-        
+
         # Apply date range filter
         if date_from:
             try:
@@ -3568,7 +3650,7 @@ def api_admin_leads_manipulation_search():
                 query = query.filter(Lead.followup_date >= target_start_utc)
             except ValueError:
                 pass
-        
+
         if date_to:
             try:
                 target_date = datetime.strptime(date_to, '%Y-%m-%d').date()
@@ -3577,18 +3659,18 @@ def api_admin_leads_manipulation_search():
                 query = query.filter(Lead.followup_date <= target_end_utc)
             except ValueError:
                 pass
-        
+
         # Apply user filter
         if user_id:
             try:
                 query = query.filter(Lead.creator_id == int(user_id))
             except ValueError:
                 pass
-        
+
         # Apply status filter
         if status:
             query = query.filter(Lead.status == status)
-        
+
         # Apply search filter
         if search:
             query = query.filter(
@@ -3600,28 +3682,28 @@ def api_admin_leads_manipulation_search():
                     Lead.remarks.ilike(f'%{search}%')
                 )
             )
-        
+
         # Order by followup_date ascending - no limit for admin operations
         # Use yield_per for better memory efficiency with large datasets
         leads_list = query.order_by(Lead.followup_date.asc())
-        
+
         # Get total count first for reporting
         total_count = leads_list.count()
         print(f"Total leads found: {total_count}")
-        
+
         # Convert to JSON - process in batches to avoid memory issues
         leads = []
         batch_size = 1000
         offset = 0
-        
+
         while True:
             batch = leads_list.offset(offset).limit(batch_size).all()
             if not batch:
                 break
-            
+
             for lead in batch:
                 creator_name = lead.creator.name if lead.creator else 'Unknown'
-                
+
                 # Ensure followup_date is timezone-aware
                 followup_date_iso = None
                 if lead.followup_date:
@@ -3630,7 +3712,7 @@ def api_admin_leads_manipulation_search():
                     else:
                         followup_date_aware = lead.followup_date
                     followup_date_iso = followup_date_aware.isoformat()
-                
+
                 leads.append({
                     'id': lead.id,
                     'customer_name': lead.customer_name,
@@ -3645,18 +3727,18 @@ def api_admin_leads_manipulation_search():
                     'created_at': lead.created_at.isoformat() if lead.created_at else None,
                     'modified_at': lead.modified_at.isoformat() if lead.modified_at else None
                 })
-            
+
             offset += batch_size
             print(f"Processed {len(leads)} leads so far...")
-            
+
             # Safety check to prevent infinite loops
             if len(leads) >= total_count:
                 break
-        
+
         print(f"Total leads returned: {len(leads)}")
-        
+
         return jsonify({'leads': leads, 'total': len(leads)})
-        
+
     except Exception as e:
         print(f"Error in api_admin_leads_manipulation_search: {e}")
         return jsonify({'error': str(e)}), 500
@@ -3667,7 +3749,7 @@ def api_admin_leads_manipulation_bulk_update():
     """Bulk update leads: change date, transfer user, or both (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         data = request.get_json()
         lead_ids = data.get('lead_ids', [])
@@ -3675,14 +3757,14 @@ def api_admin_leads_manipulation_bulk_update():
         new_followup_date = data.get('new_followup_date', '')
         from_user_id = data.get('from_user_id')
         to_user_id = data.get('to_user_id')
-        
+
         if not lead_ids or len(lead_ids) == 0:
             return jsonify({'error': 'No leads selected'}), 400
-        
+
         # Validate operation type
         if operation_type not in ['date', 'user', 'both', 'distributed']:
             return jsonify({'error': 'Invalid operation type'}), 400
-        
+
         # Validate date if needed
         new_followup_datetime = None
         if operation_type in ['date', 'both']:
@@ -3696,7 +3778,7 @@ def api_admin_leads_manipulation_bulk_update():
                 new_followup_datetime = target_datetime_ist.astimezone(pytz.UTC)
             except ValueError:
                 return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-        
+
         # Validate user IDs if needed
         if operation_type in ['user', 'both']:
             if not from_user_id or not to_user_id:
@@ -3713,39 +3795,39 @@ def api_admin_leads_manipulation_bulk_update():
                     return jsonify({'error': 'Invalid user ID(s)'}), 400
             except (ValueError, TypeError):
                 return jsonify({'error': 'Invalid user ID format'}), 400
-        
+
         # Handle distributed operation separately
         if operation_type == 'distributed':
             dist_start_date = data.get('dist_start_date', '')
             dist_end_date = data.get('dist_end_date', '')
             leads_per_day = data.get('leads_per_day')
-            
+
             if not dist_start_date or not dist_end_date or not leads_per_day:
                 return jsonify({'error': 'Distribution start date, end date, and leads per day are required'}), 400
-            
+
             try:
                 leads_per_day = int(leads_per_day)
                 if leads_per_day <= 0:
                     return jsonify({'error': 'Leads per day must be a positive number'}), 400
-                
+
                 start_date = datetime.strptime(dist_start_date, '%Y-%m-%d').date()
                 end_date = datetime.strptime(dist_end_date, '%Y-%m-%d').date()
-                
+
                 if start_date > end_date:
                     return jsonify({'error': 'Start date must be before or equal to end date'}), 400
-                
+
                 # Calculate number of days
                 days_diff = (end_date - start_date).days + 1
-                
+
             except ValueError:
                 return jsonify({'error': 'Invalid date format or leads per day. Use YYYY-MM-DD for dates'}), 400
-            
+
             # Get leads to update
             leads = Lead.query.filter(Lead.id.in_(lead_ids)).all()
-            
+
             if not leads:
                 return jsonify({'error': 'No leads found with provided IDs'}), 404
-            
+
             # Filter leads by from_user_id if specified
             if from_user_id:
                 try:
@@ -3753,7 +3835,7 @@ def api_admin_leads_manipulation_bulk_update():
                     leads = [l for l in leads if l.creator_id == from_user_id]
                 except (ValueError, TypeError):
                     pass
-            
+
             # Get target user ID (if specified, otherwise keep original)
             target_user_id = None
             if to_user_id:
@@ -3764,14 +3846,14 @@ def api_admin_leads_manipulation_bulk_update():
                         return jsonify({'error': 'Invalid target user ID'}), 400
                 except (ValueError, TypeError):
                     return jsonify({'error': 'Invalid target user ID format'}), 400
-            
+
             # Build date list
             date_list = []
             current_date = start_date
             while current_date <= end_date:
                 date_list.append(current_date)
                 current_date += timedelta(days=1)
-            
+
             # Get existing leads count per day per user
             # This helps us distribute evenly considering existing workload
             existing_counts = {}
@@ -3780,7 +3862,7 @@ def api_admin_leads_manipulation_bulk_update():
                 date_end = date_start + timedelta(days=1)
                 date_start_utc = date_start.astimezone(pytz.UTC)
                 date_end_utc = date_end.astimezone(pytz.UTC)
-                
+
                 # Count existing leads for each user on this date
                 if target_user_id:
                     # If transferring to specific user, count only that user's leads
@@ -3800,12 +3882,12 @@ def api_admin_leads_manipulation_bulk_update():
                         Lead.followup_date < date_end_utc
                     ).group_by(Lead.creator_id).all()
                     existing_counts[date] = {uid: cnt for uid, cnt in user_counts}
-            
+
             # Distribute leads across dates
             updated_count = 0
             distribution_summary = {}
             lead_index = 0
-            
+
             # Group leads by user (if not transferring to specific user)
             if not target_user_id:
                 leads_by_user = {}
@@ -3816,86 +3898,86 @@ def api_admin_leads_manipulation_bulk_update():
             else:
                 # All leads go to target user
                 leads_by_user = {target_user_id: leads}
-            
+
             # Distribute leads for each user
             for user_id, user_leads in leads_by_user.items():
                 user_lead_index = 0
-                
+
                 for date in date_list:
                     # Get current count for this user on this date
                     current_count = existing_counts[date].get(user_id, 0)
-                    
+
                     # Calculate how many leads we can add to this date
                     remaining_capacity = max(0, leads_per_day - current_count)
-                    
+
                     # Assign leads to this date
                     leads_to_assign = min(remaining_capacity, len(user_leads) - user_lead_index)
-                    
+
                     for i in range(leads_to_assign):
                         if user_lead_index >= len(user_leads):
                             break
-                        
+
                         lead = user_leads[user_lead_index]
                         old_followup_date = lead.followup_date
                         old_creator_id = lead.creator_id
-                        
+
                         # Set new followup date
                         target_datetime_ist = ist.localize(datetime.combine(date, datetime.min.time()))
                         new_followup_datetime = target_datetime_ist.astimezone(pytz.UTC)
                         lead.followup_date = new_followup_datetime
-                        
+
                         # Update user if specified
                         if target_user_id and lead.creator_id != target_user_id:
                             lead.creator_id = target_user_id
-                        
+
                         lead.modified_at = datetime.now(ist).astimezone(pytz.UTC)
-                        
+
                         # Record worked lead
                         record_worked_lead(lead.id, lead.creator_id, old_followup_date, new_followup_datetime)
-                        
+
                         # Track distribution
                         date_str = date.strftime('%Y-%m-%d')
                         if date_str not in distribution_summary:
                             distribution_summary[date_str] = 0
                         distribution_summary[date_str] += 1
-                        
+
                         updated_count += 1
                         user_lead_index += 1
-                    
+
                     if user_lead_index >= len(user_leads):
                         break
-                
+
                 # If there are remaining leads, distribute them evenly across all dates
                 if user_lead_index < len(user_leads):
                     remaining_leads = user_leads[user_lead_index:]
                     remaining_dates = date_list
-                    
+
                     for idx, lead in enumerate(remaining_leads):
                         # Cycle through remaining dates
                         target_date = remaining_dates[idx % len(remaining_dates)]
                         old_followup_date = lead.followup_date
                         old_creator_id = lead.creator_id
-                        
+
                         target_datetime_ist = ist.localize(datetime.combine(target_date, datetime.min.time()))
                         new_followup_datetime = target_datetime_ist.astimezone(pytz.UTC)
                         lead.followup_date = new_followup_datetime
-                        
+
                         if target_user_id and lead.creator_id != target_user_id:
                             lead.creator_id = target_user_id
-                        
+
                         lead.modified_at = datetime.now(ist).astimezone(pytz.UTC)
                         record_worked_lead(lead.id, lead.creator_id, old_followup_date, new_followup_datetime)
-                        
+
                         date_str = target_date.strftime('%Y-%m-%d')
                         if date_str not in distribution_summary:
                             distribution_summary[date_str] = 0
                         distribution_summary[date_str] += 1
-                        
+
                         updated_count += 1
-            
+
             # Commit all changes
             db.session.commit()
-            
+
             # Build detailed summary statistics
             summary_stats = {
                 'total_leads_selected': len(lead_ids),
@@ -3910,7 +3992,7 @@ def api_admin_leads_manipulation_bulk_update():
                 'distribution_by_date': distribution_summary,
                 'distribution_by_user': {}
             }
-            
+
             # Calculate distribution by user if user transfer was involved
             if target_user_id:
                 summary_stats['user_transfer'] = {
@@ -3918,17 +4000,17 @@ def api_admin_leads_manipulation_bulk_update():
                     'to_user_id': target_user_id,
                     'to_user_name': to_user.name if to_user else 'Unknown'
                 }
-            
+
             # Calculate average leads per day
             if distribution_summary:
                 total_distributed = sum(distribution_summary.values())
                 summary_stats['average_leads_per_day'] = round(total_distributed / len(distribution_summary), 2)
                 summary_stats['max_leads_in_day'] = max(distribution_summary.values())
                 summary_stats['min_leads_in_day'] = min(distribution_summary.values())
-            
+
             # Format distribution summary text
             summary_text = ", ".join([f"{date}: {count}" for date, count in sorted(distribution_summary.items())])
-            
+
             return jsonify({
                 'success': True,
                 'message': f'Successfully distributed {updated_count} lead(s)',
@@ -3937,26 +4019,26 @@ def api_admin_leads_manipulation_bulk_update():
                 'distribution_summary': summary_text,
                 'detailed_stats': summary_stats
             })
-        
+
         # Get leads to update (for non-distributed operations)
         leads = Lead.query.filter(Lead.id.in_(lead_ids)).all()
-        
+
         if not leads:
             return jsonify({'error': 'No leads found with provided IDs'}), 404
-        
+
         updated_count = 0
-        
+
         # Perform bulk updates
         for lead in leads:
             updated = False
             old_followup_date = lead.followup_date
             old_creator_id = lead.creator_id
-            
+
             # Update date if needed
             if operation_type in ['date', 'both']:
                 lead.followup_date = new_followup_datetime
                 updated = True
-            
+
             # Update user if needed
             if operation_type in ['user', 'both']:
                 # Only update if the lead is currently assigned to from_user_id
@@ -3966,19 +4048,19 @@ def api_admin_leads_manipulation_bulk_update():
                 # If operation is 'user' only and lead doesn't match from_user_id, skip it
                 elif operation_type == 'user':
                     continue
-            
+
             if updated:
                 lead.modified_at = datetime.now(ist).astimezone(pytz.UTC)
-                
+
                 # Record worked lead if date changed (use new creator_id if user was changed)
                 if operation_type in ['date', 'both'] and old_followup_date != new_followup_datetime:
                     record_worked_lead(lead.id, lead.creator_id, old_followup_date, new_followup_datetime)
-                
+
                 updated_count += 1
-        
+
         # Commit all changes
         db.session.commit()
-        
+
         # Build detailed summary statistics for non-distributed operations
         summary_stats = {
             'total_leads_selected': len(lead_ids),
@@ -3986,10 +4068,10 @@ def api_admin_leads_manipulation_bulk_update():
             'leads_not_updated': len(lead_ids) - updated_count,
             'operation_type': operation_type
         }
-        
+
         if operation_type in ['date', 'both']:
             summary_stats['new_followup_date'] = new_followup_date
-        
+
         if operation_type in ['user', 'both']:
             from_user = User.query.get(from_user_id) if from_user_id else None
             to_user = User.query.get(to_user_id) if to_user_id else None
@@ -3999,7 +4081,7 @@ def api_admin_leads_manipulation_bulk_update():
                 'to_user_id': to_user_id,
                 'to_user_name': to_user.name if to_user else 'Unknown'
             }
-        
+
         return jsonify({
             'success': True,
             'message': f'Successfully updated {updated_count} lead(s)',
@@ -4007,7 +4089,7 @@ def api_admin_leads_manipulation_bulk_update():
             'total_selected': len(lead_ids),
             'detailed_stats': summary_stats
         })
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error in api_admin_leads_manipulation_bulk_update: {e}")
@@ -4021,7 +4103,7 @@ def admin_leads():
         if not current_user.is_admin:
             flash('Access denied. Admin privileges required.', 'error')
             return redirect(url_for('index'))
-        
+
         if request.method == 'POST':
             # Handle form submission to add new unassigned lead
             mobile = request.form.get('mobile')
@@ -4033,7 +4115,7 @@ def admin_leads():
             remarks = request.form.get('remarks')
             scheduled_date = request.form.get('scheduled_date')
             assign_to = request.form.get('assign_to')
-            
+
             # Convert empty strings to None for database constraints
             customer_name = customer_name.strip() if customer_name else None
             car_model = car_model.strip() if car_model else None
@@ -4053,23 +4135,23 @@ def admin_leads():
             service_type = service_type.strip() if service_type else None
             source = source.strip() if source else None
             remarks = remarks.strip() if remarks else None
-            
+
             # Validate required fields
             if not mobile:
                 flash('Mobile number is required', 'error')
                 return redirect(url_for('admin_leads'))
-            
+
             # Normalize mobile number
             normalized_mobile = normalize_mobile_number(mobile)
             if not normalized_mobile:
                 flash('Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111', 'error')
                 return redirect(url_for('admin_leads'))
             mobile = normalized_mobile
-            
+
             if not assign_to:
                 flash('Please select a team member to assign this lead', 'error')
                 return redirect(url_for('admin_leads'))
-            
+
             try:
                 # Create new unassigned lead
                 new_unassigned_lead = UnassignedLead(
@@ -4084,14 +4166,14 @@ def admin_leads():
                     created_at=datetime.now(ist),
                     created_by=current_user.id
                 )
-                
+
                 # Handle scheduled date
                 if scheduled_date:
                     new_unassigned_lead.scheduled_date = ist.localize(datetime.strptime(scheduled_date, '%Y-%m-%d'))
-                
+
                 db.session.add(new_unassigned_lead)
                 db.session.flush()  # Get the ID of the new lead
-                
+
                 # Create team assignment
                 today = datetime.now(ist).date()
                 new_assignment = TeamAssignment(
@@ -4102,10 +4184,10 @@ def admin_leads():
                     assigned_by=current_user.id,
                     status='Assigned'
                 )
-                
+
                 db.session.add(new_assignment)
                 db.session.commit()
-                
+
                 # Send push notification to assigned user
                 print(f"\n📤 Attempting to send push notification for lead assignment")
                 print(f"   Lead ID: {new_unassigned_lead.id}")
@@ -4121,27 +4203,27 @@ def admin_leads():
                     print(f"❌ Exception when calling send_push_notification: {e}")
                     import traceback
                     traceback.print_exc()
-                
+
                 flash('Lead added and assigned successfully!', 'success')
                 return redirect(url_for('admin_leads'))
-                
+
             except Exception as e:
                 db.session.rollback()
                 print(f"Error adding unassigned lead: {str(e)}")
                 flash('Error adding lead. Please try again.', 'error')
                 return redirect(url_for('admin_leads'))
-        
+
         # Handle GET request - display the page
         # Get query parameters
         page = request.args.get('page', 1, type=int)
         search = request.args.get('search', '')
         created_date = request.args.get('created_date', '')
-        
+
         # Base query for unassigned leads (eager-load assignments and assignees)
         unassigned_query = UnassignedLead.query.options(
             db.joinedload(UnassignedLead.assignments).joinedload(TeamAssignment.assigned_to)
         )
-        
+
         # Apply filters
         if search:
             unassigned_query = unassigned_query.filter(
@@ -4152,7 +4234,7 @@ def admin_leads():
                     UnassignedLead.car_model.ilike(f'%{search}%')
                 )
             )
-        
+
         if created_date:
             try:
                 filter_date = datetime.strptime(created_date, '%Y-%m-%d').date()
@@ -4160,14 +4242,14 @@ def admin_leads():
                 end_date = start_date + timedelta(days=1)
                 start_date_utc = start_date.astimezone(pytz.UTC)
                 end_date_utc = end_date.astimezone(pytz.UTC)
-                
+
                 unassigned_query = unassigned_query.filter(
                     UnassignedLead.created_at >= start_date_utc,
                     UnassignedLead.created_at < end_date_utc
                 )
             except ValueError:
                 pass
-        
+
         # Paginate results
         per_page = 20
         recent_leads_pagination = unassigned_query.order_by(
@@ -4175,10 +4257,10 @@ def admin_leads():
         ).paginate(
             page=page, per_page=per_page, error_out=False
         )
-        
+
         # Get all team members for assignment dropdown
         team_members = User.query.filter_by(is_admin=False).all()
-        
+
         # Calculate team summary data
         team_summary = []
         for member in team_members:
@@ -4188,20 +4270,20 @@ def admin_leads():
                 TeamAssignment.assigned_to_user_id == member.id,
                 TeamAssignment.assigned_date == today
             ).count()
-            
+
             # Get CRM leads count for today
             crm_count = Lead.query.filter(
                 Lead.creator_id == member.id,
                 Lead.created_at >= ist.localize(datetime.combine(today, datetime.min.time())).astimezone(pytz.UTC),
                 Lead.created_at < ist.localize(datetime.combine(today + timedelta(days=1), datetime.min.time())).astimezone(pytz.UTC)
             ).count()
-            
+
             team_summary.append({
                 'member': member,
                 'assigned_count': assigned_count,
                 'crm_count': crm_count
             })
-        
+
         return render_template('admin_leads.html',
             recent_leads_pagination=recent_leads_pagination,
             recent_leads=recent_leads_pagination.items,
@@ -4211,7 +4293,7 @@ def admin_leads():
             search=search,
             created_date=created_date
         )
-        
+
     except Exception as e:
         print(f"Admin leads error: {str(e)}")
         flash('Error loading admin leads. Please try again.', 'error')
@@ -4223,7 +4305,7 @@ def team_leads():
     try:
         # Get today's date
         today = datetime.now(ist).date()
-        
+
         # Get assignments for current user for today
         assignments_query = TeamAssignment.query.join(
             UnassignedLead,
@@ -4232,11 +4314,11 @@ def team_leads():
             TeamAssignment.assigned_to_user_id == current_user.id,
             TeamAssignment.assigned_date == today
         )
-        
+
         # Apply filters
         created_date = request.args.get('created_date', '')
         search = request.args.get('search', '')
-        
+
         if created_date:
             try:
                 filter_date = datetime.strptime(created_date, '%Y-%m-%d').date()
@@ -4245,7 +4327,7 @@ def team_leads():
                 )
             except ValueError:
                 pass
-        
+
         if search:
             assignments_query = assignments_query.filter(
                 db.or_(
@@ -4254,21 +4336,21 @@ def team_leads():
                     UnassignedLead.car_model.ilike(f'%{search}%')
                 )
             )
-        
+
         # Add options to load the unassigned_lead relationship eagerly
         assignments_query = assignments_query.options(
             db.joinedload(TeamAssignment.unassigned_lead)
         )
-        
+
         assignments = assignments_query.order_by(TeamAssignment.assigned_at.desc()).all()
-        
+
         return render_template('team_leads.html',
             assignments=assignments,
             today=today,
             search=search,
             created_date=created_date
         )
-        
+
     except Exception as e:
         print(f"Team leads error: {str(e)}")
         flash('Error loading team leads. Please try again.', 'error')
@@ -4282,9 +4364,9 @@ def edit_unassigned_lead(lead_id):
         if not current_user.is_admin:
             flash('Access denied. Admin privileges required.', 'error')
             return redirect(url_for('index'))
-        
+
         lead = UnassignedLead.query.get_or_404(lead_id)
-        
+
         if request.method == 'POST':
             # Update lead details - convert empty strings to None for database constraints
             lead.customer_name = request.form.get('customer_name').strip() if request.form.get('customer_name') else None
@@ -4304,25 +4386,25 @@ def edit_unassigned_lead(lead_id):
             lead.service_type = request.form.get('service_type').strip() if request.form.get('service_type') else None
             lead.source = request.form.get('source').strip() if request.form.get('source') else None
             lead.remarks = request.form.get('remarks').strip() if request.form.get('remarks') else None
-            
+
             # Handle scheduled date
             scheduled_date = request.form.get('scheduled_date')
             if scheduled_date:
                 lead.scheduled_date = ist.localize(datetime.strptime(scheduled_date, '%Y-%m-%d'))
-            
+
             # Handle team assignment
             assign_to = request.form.get('assign_to')
             if assign_to:
                 # Convert to int since form data comes as string
                 assign_to = int(assign_to)
-                
+
                 # Check if there's an existing assignment for today
                 today = datetime.now(ist).date()
                 existing_assignment = TeamAssignment.query.filter(
                     TeamAssignment.unassigned_lead_id == lead.id,
                     TeamAssignment.assigned_date == today
                 ).first()
-                
+
                 if existing_assignment:
                     if existing_assignment.assigned_to_user_id != assign_to:
                         # Update existing assignment
@@ -4382,27 +4464,27 @@ def edit_unassigned_lead(lead_id):
                     TeamAssignment.unassigned_lead_id == lead.id,
                     TeamAssignment.assigned_date == today
                 ).first()
-                
+
                 if existing_assignment:
                     db.session.delete(existing_assignment)
                     flash('Lead unassigned successfully!', 'success')
-            
+
             db.session.commit()
             return redirect(url_for('admin_leads'))
-        
+
         # Get team members for assignment dropdown
         team_members = User.query.filter_by(is_admin=False).all()
-        
+
         # Get current assignment if any
         current_assignment = TeamAssignment.query.filter_by(
             unassigned_lead_id=lead.id
         ).order_by(TeamAssignment.assigned_at.desc()).first()
-        
-        return render_template('edit_unassigned_lead.html', 
-                             lead=lead, 
-                             team_members=team_members, 
+
+        return render_template('edit_unassigned_lead.html',
+                             lead=lead,
+                             team_members=team_members,
                              current_assignment=current_assignment)
-        
+
     except Exception as e:
         print(f"Edit unassigned lead error: {str(e)}")
         flash('Error updating lead. Please try again.', 'error')
@@ -4417,7 +4499,7 @@ def api_team_leads():
         assigned_date_str = request.args.get('assigned_date', '')
         search = request.args.get('search', '')
         status_filter = request.args.get('status_filter', 'all')  # all, pending, added_to_crm
-        
+
         # Build base query for all assignments (for statistics)
         base_query = TeamAssignment.query.join(
             UnassignedLead,
@@ -4425,10 +4507,10 @@ def api_team_leads():
         ).filter(
             TeamAssignment.assigned_to_user_id == current_user.id
         )
-        
+
         # Build filtered query for leads to return
         assignments_query = base_query
-        
+
         # Apply date filter (only if provided)
         if assigned_date_str:
             try:
@@ -4441,7 +4523,7 @@ def api_team_leads():
                 )
             except ValueError:
                 pass
-        
+
         # Apply search filter
         if search:
             assignments_query = assignments_query.filter(
@@ -4460,7 +4542,7 @@ def api_team_leads():
                     UnassignedLead.mobile.ilike(f'%{search}%')
                 )
             )
-        
+
         # Eager load relationships
         assignments_query = assignments_query.options(
             db.joinedload(TeamAssignment.unassigned_lead)
@@ -4468,28 +4550,28 @@ def api_team_leads():
         base_query = base_query.options(
             db.joinedload(TeamAssignment.unassigned_lead)
         )
-        
+
         # Get all assignments for statistics (before status filter)
         all_assignments = base_query.all()
-        
+
         # Apply status filter to the query for leads to return
         if status_filter == 'pending':
             assignments_query = assignments_query.filter(TeamAssignment.added_to_crm == False)
         elif status_filter == 'added_to_crm':
             assignments_query = assignments_query.filter(TeamAssignment.added_to_crm == True)
         # If status_filter is 'all', no additional filter needed
-        
+
         # Get filtered assignments and sort: pending first (not added_to_crm), then added_to_crm, then by assigned_at desc
         assignments = assignments_query.order_by(
             TeamAssignment.added_to_crm.asc(),  # False (pending) comes before True (added_to_crm)
             TeamAssignment.assigned_at.desc()
         ).all()
-        
+
         # Format response
         leads_data = []
         for assignment in assignments:
             unassigned_lead = assignment.unassigned_lead
-            
+
             # Combine car manufacturer and model
             car_model = None
             if unassigned_lead.car_manufacturer and unassigned_lead.car_model:
@@ -4498,7 +4580,7 @@ def api_team_leads():
                 car_model = unassigned_lead.car_manufacturer
             elif unassigned_lead.car_model:
                 car_model = unassigned_lead.car_model
-            
+
             # Format scheduled date
             scheduled_date_str = ''
             if unassigned_lead.scheduled_date:
@@ -4512,7 +4594,7 @@ def api_team_leads():
                     scheduled_date_ist = ist.localize(scheduled_date)
                 # Extract date in IST timezone
                 scheduled_date_str = scheduled_date_ist.strftime('%Y-%m-%d')
-            
+
             # Find the CRM lead ID if this assignment was added to CRM
             lead_id = None
             if assignment.added_to_crm:
@@ -4522,18 +4604,18 @@ def api_team_leads():
                     mobile=unassigned_lead.mobile,
                     creator_id=assignment.assigned_to_user_id
                 ).order_by(Lead.created_at.desc()).all()
-                
+
                 # Find the one closest to processed_at time
                 if crm_leads and assignment.processed_at:
                     closest_lead = min(crm_leads, key=lambda l: abs(
-                        (l.created_at.replace(tzinfo=pytz.UTC) if l.created_at.tzinfo is None else l.created_at) - 
+                        (l.created_at.replace(tzinfo=pytz.UTC) if l.created_at.tzinfo is None else l.created_at) -
                         (assignment.processed_at.replace(tzinfo=pytz.UTC) if assignment.processed_at.tzinfo is None else assignment.processed_at)
                     ))
                     lead_id = closest_lead.id
                 elif crm_leads:
                     # If no processed_at, just get the most recent one
                     lead_id = crm_leads[0].id
-            
+
             leads_data.append({
                 'assignment_id': assignment.id,
                 'customer_name': unassigned_lead.customer_name or 'Unknown Customer',
@@ -4549,13 +4631,13 @@ def api_team_leads():
                 'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
                 'assigned_date': assignment.assigned_date.strftime('%Y-%m-%d') if assignment.assigned_date else None
             })
-        
+
         # Calculate statistics from all assignments (not filtered by status)
         total_assigned = len(all_assignments)
         pending = sum(1 for assignment in all_assignments if not assignment.added_to_crm)
         contacted = sum(1 for assignment in all_assignments if assignment.status == 'Contacted')
         added_to_crm = sum(1 for assignment in all_assignments if assignment.added_to_crm)
-        
+
         return jsonify({
             'success': True,
             'leads': leads_data,
@@ -4566,7 +4648,7 @@ def api_team_leads():
                 'added_to_crm': added_to_crm
             }
         })
-        
+
     except Exception as e:
         print(f"Error fetching team leads: {e}")
         return jsonify({'success': False, 'message': 'Error fetching team leads'}), 500
@@ -4577,18 +4659,18 @@ def get_assignment_details(assignment_id):
     try:
         # Get the assignment
         assignment = TeamAssignment.query.get_or_404(assignment_id)
-        
+
         # Check if user has permission to view this assignment
         if assignment.assigned_to_user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'})
-        
+
         # Check if already added to CRM
         if assignment.added_to_crm:
             return jsonify({'success': False, 'message': 'This lead has already been added to CRM'})
-        
+
         # Get the unassigned lead data
         unassigned_lead = assignment.unassigned_lead
-        
+
         # Get car_model from unassigned_lead (combine manufacturer and model)
         car_model = None
         if unassigned_lead.car_manufacturer and unassigned_lead.car_model:
@@ -4597,7 +4679,7 @@ def get_assignment_details(assignment_id):
             car_model = unassigned_lead.car_manufacturer
         elif unassigned_lead.car_model:
             car_model = unassigned_lead.car_model
-        
+
         return jsonify({
             'success': True,
             'customer_name': unassigned_lead.customer_name or 'Unknown Customer',
@@ -4608,7 +4690,7 @@ def get_assignment_details(assignment_id):
             'status': 'New Lead',  # Default status is always "New Lead" for team leads
             'remarks': ''  # Keep remarks empty by default
         })
-        
+
     except Exception as e:
         print(f"Error fetching assignment details: {e}")
         return jsonify({'success': False, 'message': 'Error fetching assignment details'})
@@ -4625,32 +4707,32 @@ def add_to_crm_with_details(assignment_id):
         followup_date = data.get('followup_date')
         status = data.get('status', 'New Lead')
         remarks = data.get('remarks', '')
-        
+
         # Get the assignment
         assignment = TeamAssignment.query.get_or_404(assignment_id)
-        
+
         # Check if user has permission to add this assignment to CRM
         if assignment.assigned_to_user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'})
-        
+
         # Check if already added to CRM
         if assignment.added_to_crm:
             return jsonify({'success': False, 'message': 'This lead has already been added to CRM'})
-        
+
         # Validate required fields
         if not customer_name or not mobile:
             return jsonify({'success': False, 'message': 'Customer Name and Mobile Number are required'})
-        
+
         # Normalize mobile number
         normalized_mobile = normalize_mobile_number(mobile)
         if not normalized_mobile:
             return jsonify({'success': False, 'message': 'Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111'})
         mobile = normalized_mobile
-        
+
         # Parse followup date
         followup_datetime = datetime.strptime(followup_date, '%Y-%m-%d')
         followup_date_ist = ist.localize(followup_datetime)
-        
+
         # Get car_model from unassigned_lead (combine manufacturer and model) if not provided
         unassigned_lead = assignment.unassigned_lead
         if not car_model:
@@ -4660,7 +4742,7 @@ def add_to_crm_with_details(assignment_id):
                 car_model = unassigned_lead.car_manufacturer
             elif unassigned_lead.car_model:
                 car_model = unassigned_lead.car_model
-        
+
         # Create a new lead in the main CRM system
         new_lead = Lead(
             customer_name=customer_name,
@@ -4674,23 +4756,23 @@ def add_to_crm_with_details(assignment_id):
             created_at=datetime.now(ist),
             modified_at=datetime.now(ist)
         )
-        
+
         # Add the new lead to the database
         db.session.add(new_lead)
-        
+
         # Mark the assignment as added to CRM
         assignment.added_to_crm = True
         assignment.status = 'Added to CRM'
         assignment.processed_at = datetime.now(ist)
-        
+
         # Commit the changes
         db.session.commit()
-        
+
         # Clear any cached queries to ensure fresh data
         db.session.expire_all()
-        
+
         return jsonify({'success': True, 'message': 'Lead successfully added to CRM!'})
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error adding to CRM: {str(e)}")
@@ -4702,20 +4784,20 @@ def add_to_crm(assignment_id):
     try:
         # Get the assignment
         assignment = TeamAssignment.query.get_or_404(assignment_id)
-        
+
         # Check if user has permission to add this assignment to CRM
         if assignment.assigned_to_user_id != current_user.id:
             flash('Access denied. You can only add your own assigned leads to CRM.', 'error')
             return redirect(url_for('team_leads'))
-        
+
         # Check if already added to CRM
         if assignment.added_to_crm:
             flash('This lead has already been added to CRM.', 'info')
             return redirect(url_for('team_leads'))
-        
+
         # Get the unassigned lead data
         unassigned_lead = assignment.unassigned_lead
-        
+
         # Create a new lead in the main CRM system
         new_lead = Lead(
             customer_name=unassigned_lead.customer_name or 'Unknown Customer',
@@ -4728,25 +4810,25 @@ def add_to_crm(assignment_id):
             created_at=datetime.now(ist),
             modified_at=datetime.now(ist)
         )
-        
+
         # Add the new lead to the database
         db.session.add(new_lead)
-        
+
         # Mark the assignment as added to CRM
         assignment.added_to_crm = True
         assignment.status = 'Added to CRM'
         assignment.processed_at = datetime.now(ist)
-        
+
         # Commit the changes
         db.session.commit()
-        
+
         flash('Lead successfully added to CRM!', 'success')
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error adding to CRM: {str(e)}")
         flash('Error adding lead to CRM. Please try again.', 'error')
-    
+
     return redirect(url_for('team_leads'))
 
 # ==================== NEW FEATURE ROUTES ====================
@@ -4764,7 +4846,7 @@ def get_templates():
                 Template.created_by == current_user.id
             )
         ).order_by(Template.category, Template.title).all()
-        
+
         templates_data = [{
             'id': t.id,
             'title': t.title,
@@ -4773,7 +4855,7 @@ def get_templates():
             'is_global': t.is_global,
             'usage_count': t.usage_count
         } for t in templates]
-        
+
         return jsonify({'success': True, 'templates': templates_data})
     except Exception as e:
         print(f"Error fetching templates: {e}")
@@ -4787,7 +4869,7 @@ def use_template(template_id):
         template = Template.query.get_or_404(template_id)
         template.usage_count += 1
         db.session.commit()
-        
+
         return jsonify({'success': True, 'content': template.content})
     except Exception as e:
         db.session.rollback()
@@ -4799,7 +4881,7 @@ def create_template():
     """Create a new personal template"""
     try:
         data = request.get_json()
-        
+
         new_template = Template(
             title=data.get('title'),
             content=data.get('content'),
@@ -4807,10 +4889,10 @@ def create_template():
             is_global=False,  # Personal templates are not global
             created_by=current_user.id
         )
-        
+
         db.session.add(new_template)
         db.session.commit()
-        
+
         return jsonify({'success': True, 'message': 'Template created successfully'})
     except Exception as e:
         db.session.rollback()
@@ -4825,18 +4907,18 @@ def quick_log(lead_id):
     try:
         data = request.get_json()
         lead = Lead.query.get_or_404(lead_id)
-        
+
         # Check permissions
         if not current_user.is_admin and lead.creator_id != current_user.id:
             return jsonify({'success': False, 'message': 'Permission denied'})
-        
+
         # Store old followup date for tracking
         old_followup_date = lead.followup_date
-        
+
         # Update fields
         if 'status' in data:
             lead.status = data['status']
-        
+
         if 'remarks' in data and data['remarks']:
             # Append new remarks with timestamp
             timestamp = datetime.now(ist).strftime('%Y-%m-%d %H:%M')
@@ -4845,19 +4927,19 @@ def quick_log(lead_id):
                 lead.remarks = f"{lead.remarks}\n{new_remark}"
             else:
                 lead.remarks = new_remark
-        
+
         if 'followup_date' in data:
             followup_datetime = datetime.strptime(data['followup_date'], '%Y-%m-%d')
             new_followup_date = ist.localize(followup_datetime)
             lead.followup_date = new_followup_date
-        
+
         lead.modified_at = datetime.now(ist)
         db.session.commit()
-        
+
         # Record worked lead if followup date changed
         if old_followup_date != lead.followup_date:
             record_worked_lead(lead_id, current_user.id, old_followup_date, lead.followup_date)
-        
+
         # Log the call activity
         if 'call_duration' in data:
             call_log = CallLog(
@@ -4871,7 +4953,7 @@ def quick_log(lead_id):
             )
             db.session.add(call_log)
             db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'message': 'Lead updated successfully',
@@ -4881,7 +4963,7 @@ def quick_log(lead_id):
                 'followup_date': lead.followup_date.strftime('%Y-%m-%d') if lead.followup_date else None
             }
         })
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error in quick-log: {e}")
@@ -4898,14 +4980,14 @@ def get_calling_queue():
         target_end = target_start + timedelta(days=1)
         target_start_utc = target_start.astimezone(pytz.UTC)
         target_end_utc = target_end.astimezone(pytz.UTC)
-        
+
         # Get today's followups for current user
         leads = Lead.query.filter(
             Lead.creator_id == current_user.id,
             Lead.followup_date >= target_start_utc,
             Lead.followup_date < target_end_utc
         ).all()
-        
+
         # Calculate scores for each lead
         scored_leads = []
         for lead in leads:
@@ -4915,10 +4997,10 @@ def get_calling_queue():
                 'score': score['total_score'],
                 'priority': score['priority']
             })
-        
+
         # Sort by score (highest first)
         scored_leads.sort(key=lambda x: x['score'], reverse=True)
-        
+
         # Convert to JSON
         queue_data = []
         for item in scored_leads[:50]:  # Limit to top 50
@@ -4934,13 +5016,13 @@ def get_calling_queue():
                 'score': item['score'],
                 'priority': item['priority']
             })
-        
+
         return jsonify({
             'success': True,
             'queue': queue_data,
             'total_count': len(queue_data)
         })
-        
+
     except Exception as e:
         print(f"Error fetching calling queue: {e}")
         return jsonify({'success': False, 'message': 'Error fetching queue'})
@@ -4956,7 +5038,7 @@ def calculate_lead_score(lead):
     - First-time lead: +10 points
     """
     score = 0
-    
+
     # Check if overdue - ensure both datetimes are timezone-aware
     now_utc = datetime.now(pytz.UTC)
     if lead.followup_date:
@@ -4966,11 +5048,11 @@ def calculate_lead_score(lead):
             followup_date_aware = pytz.UTC.localize(lead.followup_date)
         else:
             followup_date_aware = lead.followup_date
-        
+
         if followup_date_aware < now_utc:
             days_overdue = (now_utc - followup_date_aware).days
             score += min(50, 10 * days_overdue)  # Max 50 points
-    
+
     # Status-based score
     status_scores = {
         'Confirmed': 40,
@@ -4982,11 +5064,11 @@ def calculate_lead_score(lead):
         'Feedback': 5
     }
     score += status_scores.get(lead.status, 0)
-    
+
     # Engagement score (has remarks = engaged)
     if lead.remarks and len(lead.remarks) > 50:
         score += 20
-    
+
     # Recency score (recently modified = active)
     if lead.modified_at:
         days_since_modified = (datetime.now(ist) - lead.modified_at).days
@@ -4994,7 +5076,7 @@ def calculate_lead_score(lead):
             score += 15
         elif days_since_modified < 3:
             score += 10
-    
+
     # Determine priority
     if score >= 60:
         priority = 'High'
@@ -5002,7 +5084,7 @@ def calculate_lead_score(lead):
         priority = 'Medium'
     else:
         priority = 'Low'
-    
+
     return {
         'total_score': score,
         'priority': priority
@@ -5022,27 +5104,27 @@ def analytics_page():
     try:
         # Date range from request or default to last 30 days
         end_date = request.args.get('end_date', datetime.now(ist).strftime('%Y-%m-%d'))
-        start_date = request.args.get('start_date', 
+        start_date = request.args.get('start_date',
                                       (datetime.now(ist) - timedelta(days=30)).strftime('%Y-%m-%d'))
-        
+
         start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
         end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
-        
+
         start_utc = ist.localize(datetime.combine(start_dt, datetime.min.time())).astimezone(pytz.UTC)
         end_utc = ist.localize(datetime.combine(end_dt + timedelta(days=1), datetime.min.time())).astimezone(pytz.UTC)
-        
+
         # Get user filter
         user_filter = None
         if current_user.is_admin and request.args.get('user_id'):
             user_filter = int(request.args.get('user_id'))
         elif not current_user.is_admin:
             user_filter = current_user.id
-        
+
         # Build base query
         base_query = Lead.query
         if user_filter:
             base_query = base_query.filter(Lead.creator_id == user_filter)
-        
+
         # 1. Conversion Funnel
         funnel_data = {
             'total_leads': base_query.filter(
@@ -5065,7 +5147,7 @@ def analytics_page():
                 Lead.status == 'Completed'
             ).count()
         }
-        
+
         # 2. Status Distribution
         status_distribution = db.session.query(
             Lead.status,
@@ -5077,7 +5159,7 @@ def analytics_page():
         if user_filter:
             status_distribution = status_distribution.filter(Lead.creator_id == user_filter)
         status_data = dict(status_distribution.group_by(Lead.status).all())
-        
+
         # 3. Daily Trends
         daily_trends = db.session.query(
             db.func.date(Lead.created_at).label('date'),
@@ -5089,7 +5171,7 @@ def analytics_page():
         if user_filter:
             daily_trends = daily_trends.filter(Lead.creator_id == user_filter)
         daily_data = daily_trends.group_by(db.func.date(Lead.created_at)).all()
-        
+
         # 4. User Performance (if admin)
         user_performance = []
         if current_user.is_admin:
@@ -5100,23 +5182,23 @@ def analytics_page():
                     Lead.created_at >= start_utc,
                     Lead.created_at < end_utc
                 ).count()
-                
+
                 user_completed = base_query.filter(
                     Lead.creator_id == user.id,
                     Lead.created_at >= start_utc,
                     Lead.created_at < end_utc,
                     Lead.status == 'Completed'
                 ).count()
-                
+
                 conversion_rate = (user_completed / user_leads * 100) if user_leads > 0 else 0
-                
+
                 user_performance.append({
                     'name': user.name,
                     'total_leads': user_leads,
                     'completed': user_completed,
                     'conversion_rate': round(conversion_rate, 2)
                 })
-        
+
         # 5. Call Analytics (if call logs exist)
         total_calls = CallLog.query.filter(
             CallLog.call_started_at >= start_utc,
@@ -5124,7 +5206,7 @@ def analytics_page():
         )
         if user_filter:
             total_calls = total_calls.filter(CallLog.user_id == user_filter)
-        
+
         call_stats = {
             'total_calls': total_calls.count(),
             'answered': total_calls.filter(CallLog.call_status == 'answered').count(),
@@ -5135,9 +5217,9 @@ def analytics_page():
                 CallLog.call_status == 'answered'
             ).scalar() or 0
         }
-        
+
         users = User.query.all() if current_user.is_admin else [current_user]
-        
+
         return render_template('analytics.html',
                              funnel_data=funnel_data,
                              status_data=status_data,
@@ -5147,7 +5229,7 @@ def analytics_page():
                              start_date=start_date,
                              end_date=end_date,
                              users=users)
-    
+
     except Exception as e:
         print(f"Analytics error: {e}")
         flash('Error loading analytics', 'error')
@@ -5189,7 +5271,7 @@ def serve_frontend():
     try:
         frontend_path = os.path.join(os.path.dirname(__file__), 'static', 'frontend')
         index_path = os.path.join(frontend_path, 'index.html')
-        
+
         if os.path.exists(index_path):
             return send_file(index_path)
         else:
@@ -5206,7 +5288,7 @@ def init_database():
         with application.app_context():
             # Create all tables
             db.create_all()
-            
+
             # Check if admin user exists, if not create it
             # If exists, ensure is_admin is True (fix for existing admin users)
             admin_user = User.query.filter_by(username='admin').first()
@@ -5225,13 +5307,13 @@ def init_database():
                     admin_user.is_admin = True
                     db.session.commit()
                     print(f"✅ Admin user is_admin field updated to True")
-            
+
             # Create default users if they don't exist
             default_users = [
                 {'username': 'hemlata', 'name': 'Hemlata', 'password': 'hemlata123'},
                 {'username': 'sneha', 'name': 'Sneha', 'password': 'sneha123'}
             ]
-            
+
             for user_data in default_users:
                 existing_user = User.query.filter_by(username=user_data['username']).first()
                 if not existing_user:
@@ -5242,17 +5324,17 @@ def init_database():
                     )
                     new_user.set_password(user_data['password'])  # Use set_password to hash it properly
                     db.session.add(new_user)
-            
+
             # Initialize customer name counter if it doesn't exist
             counter = CustomerNameCounter.query.first()
             if not counter:
                 counter = CustomerNameCounter(counter=0)
                 db.session.add(counter)
                 print("✅ Customer name counter initialized")
-            
+
             db.session.commit()
             print("Database initialized successfully")
-            
+
     except Exception as e:
         print(f"Database initialization error: {e}")
         db.session.rollback()
@@ -5266,35 +5348,35 @@ def send_push_notification(user_id, title, body, url=None):
     print(f"[{timestamp}] 🔔 PUSH NOTIFICATION ATTEMPT")
     print(f"{'='*60}")
     print(f"User ID: {user_id}")
-    
+
     try:
         # Get user info for logging
         user = User.query.get(user_id)
         user_name = user.name if user else f"Unknown (ID: {user_id})"
         print(f"User: {user_name} (username: {user.username if user else 'N/A'})")
-        
+
         subscriptions = PushSubscription.query.filter_by(user_id=user_id).all()
         print(f"Found {len(subscriptions)} subscription(s) for user {user_id}")
-        
+
         if not subscriptions:
             print(f"❌ No push subscriptions found for user {user_id} ({user_name})")
             print(f"{'='*60}\n")
             return
-        
+
         # Get VAPID keys from environment
         vapid_private_key = os.getenv('VAPID_PRIVATE_KEY')
         vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
         vapid_claim_email = os.getenv('VAPID_CLAIM_EMAIL', 'mailto:admin@gaadimech.com')
-        
+
         print(f"VAPID Private Key: {'✅ Present' if vapid_private_key else '❌ Missing'}")
         print(f"VAPID Public Key: {'✅ Present' if vapid_public_key else '❌ Missing'}")
         print(f"VAPID Claim Email: {vapid_claim_email}")
-        
+
         if not vapid_private_key or not vapid_public_key:
             print("❌ VAPID keys not configured. Push notifications disabled.")
             print(f"{'='*60}\n")
             return
-        
+
         # Prepare notification payload
         notification_data = {
             'title': title,
@@ -5307,21 +5389,21 @@ def send_push_notification(user_id, title, body, url=None):
                 'url': url or '/todays-leads'
             }
         }
-        
+
         print(f"Notification Title: {title}")
         print(f"Notification Body: {body}")
         print(f"Notification URL: {url or '/todays-leads'}")
-        
+
         success_count = 0
         failed_count = 0
-        
+
         for idx, subscription in enumerate(subscriptions, 1):
             print(f"\n--- Processing Subscription {idx}/{len(subscriptions)} ---")
             print(f"Subscription ID: {subscription.id}")
             print(f"Endpoint: {subscription.endpoint[:50]}...")
             print(f"User Agent: {subscription.user_agent or 'N/A'}")
             print(f"Created At: {subscription.created_at}")
-            
+
             try:
                 subscription_info = {
                     'endpoint': subscription.endpoint,
@@ -5330,7 +5412,7 @@ def send_push_notification(user_id, title, body, url=None):
                         'auth': subscription.auth
                     }
                 }
-                
+
                 print("Sending webpush...")
                 webpush(
                     subscription_info=subscription_info,
@@ -5359,11 +5441,11 @@ def send_push_notification(user_id, title, body, url=None):
                 import traceback
                 traceback.print_exc()
                 failed_count += 1
-        
+
         print(f"\n{'='*60}")
         print(f"📊 SUMMARY: {success_count} successful, {failed_count} failed")
         print(f"{'='*60}\n")
-        
+
     except Exception as e:
         print(f"❌ Error in send_push_notification: {e}")
         import traceback
@@ -5381,26 +5463,26 @@ def api_push_subscribe():
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
         return response
-    
+
     try:
         if not request.is_json:
             return jsonify({'success': False, 'message': 'Invalid request format'}), 400
-        
+
         data = request.get_json()
         endpoint = data.get('endpoint')
         p256dh = data.get('keys', {}).get('p256dh')
         auth = data.get('keys', {}).get('auth')
         user_agent = request.headers.get('User-Agent', '')
-        
+
         if not endpoint or not p256dh or not auth:
             return jsonify({'success': False, 'message': 'Missing required subscription data'}), 400
-        
+
         # Check if subscription already exists
         existing = PushSubscription.query.filter_by(
             user_id=current_user.id,
             endpoint=endpoint
         ).first()
-        
+
         timestamp = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
         if existing:
             # Update existing subscription
@@ -5426,11 +5508,11 @@ def api_push_subscribe():
                 user_agent=user_agent
             )
             db.session.add(subscription)
-        
+
         db.session.commit()
         print(f"   ✅ Subscription saved successfully\n")
         return jsonify({'success': True, 'message': 'Push subscription registered successfully'})
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error registering push subscription: {e}")
@@ -5448,13 +5530,13 @@ def api_push_vapid_public_key():
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
         return response
-    
+
     try:
         vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
         if not vapid_public_key:
             # Return 200 with empty key instead of 500 - frontend will handle it
             return jsonify({'publicKey': '', 'error': 'VAPID public key not configured'}), 200
-        
+
         return jsonify({'publicKey': vapid_public_key})
     except Exception as e:
         print(f"Error getting VAPID public key: {e}")
@@ -5473,30 +5555,30 @@ def api_push_unsubscribe():
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
         return response
-    
+
     try:
         if not request.is_json:
             return jsonify({'success': False, 'message': 'Invalid request format'}), 400
-        
+
         data = request.get_json()
         endpoint = data.get('endpoint')
-        
+
         if not endpoint:
             return jsonify({'success': False, 'message': 'Missing endpoint'}), 400
-        
+
         # Find and delete subscription
         subscription = PushSubscription.query.filter_by(
             user_id=current_user.id,
             endpoint=endpoint
         ).first()
-        
+
         if subscription:
             db.session.delete(subscription)
             db.session.commit()
             return jsonify({'success': True, 'message': 'Push subscription removed successfully'})
         else:
             return jsonify({'success': False, 'message': 'Subscription not found'}), 404
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error removing push subscription: {e}")
@@ -5509,7 +5591,7 @@ def api_push_debug_subscriptions():
     try:
         # Get user_id from query params (admin only) or use current user
         user_id_param = request.args.get('user_id', type=int)
-        
+
         if user_id_param:
             # Only admins can check other users' subscriptions
             if not current_user.is_admin:
@@ -5517,20 +5599,20 @@ def api_push_debug_subscriptions():
             target_user_id = user_id_param
         else:
             target_user_id = current_user.id
-        
+
         # Get user info
         user = User.query.get(target_user_id)
         if not user:
             return jsonify({'error': f'User {target_user_id} not found'}), 404
-        
+
         # Get subscriptions
         subscriptions = PushSubscription.query.filter_by(user_id=target_user_id).all()
-        
+
         # Check VAPID keys
         vapid_private_key = os.getenv('VAPID_PRIVATE_KEY')
         vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
         vapid_claim_email = os.getenv('VAPID_CLAIM_EMAIL', 'mailto:admin@gaadimech.com')
-        
+
         subscriptions_data = []
         for sub in subscriptions:
             subscriptions_data.append({
@@ -5542,7 +5624,7 @@ def api_push_debug_subscriptions():
                 'has_p256dh': bool(sub.p256dh),
                 'has_auth': bool(sub.auth),
             })
-        
+
         return jsonify({
             'user': {
                 'id': user.id,
@@ -5570,19 +5652,19 @@ def api_push_debug_user_by_username():
     """Debug endpoint to find user by username and check their subscriptions (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         username = request.args.get('username')
         if not username:
             return jsonify({'error': 'username parameter required'}), 400
-        
+
         user = User.query.filter_by(username=username).first()
         if not user:
             return jsonify({'error': f'User with username "{username}" not found'}), 404
-        
+
         # Get subscriptions
         subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
-        
+
         subscriptions_data = []
         for sub in subscriptions:
             subscriptions_data.append({
@@ -5591,7 +5673,7 @@ def api_push_debug_user_by_username():
                 'user_agent': sub.user_agent,
                 'created_at': sub.created_at.isoformat() if sub.created_at else None,
             })
-        
+
         return jsonify({
             'user': {
                 'id': user.id,
@@ -5645,33 +5727,33 @@ def api_sync_teleobi_templates():
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         client = get_teleobi_client()
         if not client:
             return jsonify({'error': 'Teleobi client not available'}), 500
-        
+
         # Fetch templates from Teleobi
         templates = client.get_templates(force_refresh=True)
-        
+
         if not templates:
             return jsonify({
                 'success': False,
                 'message': 'No templates found or API error',
                 'templates': []
             }), 200
-        
+
         # Update cache
         synced_count = 0
         for template in templates:
             cached = TeleobiTemplateCache.query.filter_by(template_id=template.template_id).first()
-            
+
             # Convert variables dict to JSON string for storage
             variables_json = json.dumps(template.variables) if isinstance(template.variables, dict) else template.variables
-            
+
             if cached:
                 # Update existing
                 cached.template_name = template.template_name
@@ -5700,11 +5782,11 @@ def api_sync_teleobi_templates():
                     phone_number_id=os.getenv('TELEOBI_PHONE_NUMBER_ID', '')
                 )
                 db.session.add(cached)
-            
+
             synced_count += 1
-        
+
         db.session.commit()
-        
+
         response = jsonify({
             'success': True,
             'message': f'Synced {synced_count} templates',
@@ -5713,7 +5795,7 @@ def api_sync_teleobi_templates():
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"Error syncing templates: {e}")
@@ -5732,18 +5814,18 @@ def api_get_teleobi_templates():
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         template_type = request.args.get('type')  # 'utility' or 'marketing'
         status = request.args.get('status', 'Approved')  # Only show approved by default
-        
+
         query = TeleobiTemplateCache.query.filter_by(status=status)
-        
+
         if template_type:
             query = query.filter_by(template_type=template_type)
-        
+
         templates = query.order_by(TeleobiTemplateCache.template_name).all()
-        
+
         templates_data = []
         for template in templates:
             # Parse template JSON to get header info
@@ -5766,7 +5848,7 @@ def api_get_teleobi_templates():
                                 break
                 except:
                     pass
-            
+
             # Parse variables from JSON string if needed
             variables_data = template.variables or {}
             if isinstance(variables_data, str):
@@ -5774,7 +5856,7 @@ def api_get_teleobi_templates():
                     variables_data = json.loads(variables_data)
                 except:
                     variables_data = {}
-            
+
             # Filter out internal keys and ensure only valid variables
             filtered_variables = {}
             for key, value in variables_data.items():
@@ -5788,7 +5870,7 @@ def api_get_teleobi_templates():
                 # Only include variables with proper metadata structure
                 if isinstance(value, dict) and ('label' in value or 'position' in value):
                     filtered_variables[key] = value
-            
+
             templates_data.append({
                 'template_id': template.template_id,
                 'template_name': template.template_name,
@@ -5800,7 +5882,7 @@ def api_get_teleobi_templates():
                 'header_info': header_info,
                 'synced_at': template.synced_at.isoformat() if template.synced_at else None
             })
-        
+
         response = jsonify({
             'success': True,
             'templates': templates_data,
@@ -5809,7 +5891,7 @@ def api_get_teleobi_templates():
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-        
+
     except Exception as e:
         print(f"Error fetching templates: {e}")
         import traceback
@@ -5830,37 +5912,37 @@ def api_send_bulk_whatsapp():
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-        
+
         template_name = data.get('template_name')
         recipients = data.get('recipients', [])  # List of phone numbers or lead IDs
         variables = data.get('variables', {})  # Template variables
         filter_criteria = data.get('filter_criteria', {})  # For tracking
-        
+
         if not template_name:
             return jsonify({'error': 'Template name is required'}), 400
-        
+
         if not recipients:
             return jsonify({'error': 'At least one recipient is required'}), 400
-        
+
         # Validate template exists and is approved
         template = TeleobiTemplateCache.query.filter_by(
             template_name=template_name,
             status='Approved'
         ).first()
-        
+
         if not template:
             return jsonify({
                 'error': f'Template "{template_name}" not found or not approved'
             }), 400
-        
+
         # Parse template variables from stored JSON
         template_variables = template.variables or {}
         if isinstance(template_variables, str):
@@ -5868,11 +5950,11 @@ def api_send_bulk_whatsapp():
                 template_variables = json.loads(template_variables)
             except:
                 template_variables = {}
-        
+
         # Validate that all required variables are provided
         required_vars = []
         provided_vars = set()
-        
+
         # Track what variables are provided (check both body_var_X and var_X formats)
         for key in variables.keys():
             if key.startswith('body_var_'):
@@ -5885,7 +5967,7 @@ def api_send_bulk_whatsapp():
                 provided_vars.add(f'var_{var_num}')
             else:
                 provided_vars.add(key)
-        
+
         for var_key, var_info in template_variables.items():
             if var_key.startswith('_'):
                 continue  # Skip internal keys
@@ -5899,7 +5981,7 @@ def api_send_bulk_whatsapp():
                             required_vars.append(var_info.get('label', var_key))
                     else:
                         required_vars.append(var_info.get('label', var_key))
-        
+
         if required_vars:
             return jsonify({
                 'error': f'Template requires the following variables: {", ".join(required_vars)}',
@@ -5907,7 +5989,7 @@ def api_send_bulk_whatsapp():
                 'template_variables': {k: v for k, v in template_variables.items() if not k.startswith('_')},
                 'provided_variables': list(variables.keys())
             }), 400
-        
+
         # Check if template requires image header
         header_info = {}
         if template.template_json:
@@ -5933,12 +6015,12 @@ def api_send_bulk_whatsapp():
                                 pass  # Don't block, but we'll log it
             except:
                 pass
-        
+
         # Get Teleobi client
         client = get_teleobi_client()
         if not client:
             return jsonify({'error': 'Teleobi client not available'}), 500
-        
+
         # Pre-send validation: Check quality metrics
         # Note: We use internal metrics which may start at 0, so we only warn, don't block
         # The actual WhatsApp account quality should be checked in Teleobi dashboard
@@ -5950,39 +6032,43 @@ def api_send_bulk_whatsapp():
                 'quality_metrics': quality_metrics,
                 'warning': 'This check is based on internal metrics. Verify actual account quality in Teleobi dashboard.'
             }), 400
-        
+
         # Check rate limits
         rate_stats = quality_metrics.get('rate_limit_stats', {})
         daily_used = rate_stats.get('per_day', {}).get('used', 0)
         daily_limit = rate_stats.get('per_day', {}).get('limit', 1000)
-        
+
         if daily_limit != 'unlimited' and daily_used + len(recipients) > daily_limit:
             return jsonify({
                 'error': f'Daily limit would be exceeded. Used: {daily_used}/{daily_limit}, Requested: {len(recipients)}',
                 'rate_limit': rate_stats
             }), 429
-        
-        # Create bulk job record
+
+        # Create bulk job record with recipients and variables stored for recovery
         bulk_job = WhatsAppBulkJob(
             job_name=data.get('job_name', f'Bulk send - {template_name}'),
             template_name=template_name,
+            template_type=template.template_type,
             total_recipients=len(recipients),
             status='pending',
             filter_criteria=filter_criteria,
+            recipients=recipients,  # Store recipients for job recovery
+            variables=variables,  # Store variables for job recovery
             created_by=current_user.id
         )
         db.session.add(bulk_job)
         db.session.commit()
-        
-        # Process in background thread
+
+        # Process in background thread (non-daemon so it can complete even if main thread exits)
+        # However, in production with gunicorn, we need recovery mechanism instead
         import threading
         thread = threading.Thread(
             target=process_bulk_whatsapp_job,
-            args=(bulk_job.id, recipients, template_name, variables, template.template_type),
-            daemon=True
+            args=(bulk_job.id,),  # Only pass job_id, function will load from DB
+            daemon=False  # Changed to False - but still vulnerable to gunicorn restarts
         )
         thread.start()
-        
+
         response = jsonify({
             'success': True,
             'message': 'Bulk send job created',
@@ -5993,7 +6079,7 @@ def api_send_bulk_whatsapp():
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response, 202  # Accepted
-        
+
     except Exception as e:
         db.session.rollback()
         error_msg = str(e)
@@ -6006,10 +6092,11 @@ def api_send_bulk_whatsapp():
             'details': 'Check backend logs for more information'
         }), 500
 
-def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str, variables: dict, template_type: str):
+def process_bulk_whatsapp_job(job_id: int):
     """
     Background function to process bulk WhatsApp sending
     Runs in separate thread with rate limiting and error handling
+    Can resume from where it left off if interrupted (job recovery)
     """
     # CRITICAL: Create application context for background thread
     # Flask-SQLAlchemy requires application context to work
@@ -6018,13 +6105,37 @@ def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str,
             # Get job from database
             bulk_job = WhatsAppBulkJob.query.get(job_id)
             if not bulk_job:
-                print(f"Job {job_id} not found")
+                print(f"❌ Job {job_id} not found")
                 return
-            
+
+            # Load recipients and variables from database (for recovery)
+            recipients = bulk_job.recipients or []
+            variables = bulk_job.variables or {}
+            template_name = bulk_job.template_name
+            template_type = bulk_job.template_type or 'UTILITY'
+
+            if not recipients:
+                print(f"❌ Job {job_id} has no recipients stored")
+                bulk_job.status = 'failed'
+                bulk_job.completed_at = datetime.now(ist)
+                db.session.commit()
+                return
+
+            # Check if job is already completed
+            if bulk_job.status in ['completed', 'failed', 'cancelled']:
+                print(f"ℹ️  Job {job_id} is already {bulk_job.status}, skipping")
+                return
+
+            # Resume from where we left off (if job was interrupted)
+            start_index = bulk_job.processed_count or 0
+            if start_index > 0:
+                print(f"🔄 Resuming job {job_id} from message {start_index + 1}/{len(recipients)}")
+
             bulk_job.status = 'processing'
-            bulk_job.started_at = datetime.now(ist)
+            if not bulk_job.started_at:
+                bulk_job.started_at = datetime.now(ist)
             db.session.commit()
-            
+
             # Get Teleobi client
             client = get_teleobi_client()
             if not client:
@@ -6032,20 +6143,31 @@ def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str,
                 bulk_job.completed_at = datetime.now(ist)
                 db.session.commit()
                 return
-            
-            sent_count = 0
-            failed_count = 0
+
+            # Get current counts from database (in case we're resuming)
+            sent_count = bulk_job.sent_count or 0
+            failed_count = bulk_job.failed_count or 0
             total_recipients = len(recipients)
-            start_time = datetime.now(ist)
-            
-            # Process each recipient
-            for index, recipient in enumerate(recipients, 1):
-                processed_count = index  # Current progress
+            start_time = bulk_job.started_at or datetime.now(ist)
+
+            # Process each recipient starting from where we left off
+            for index in range(start_index, total_recipients):
+                recipient = recipients[index]
+                processed_count = index + 1  # Current progress (1-indexed)
+
+                # Check if job has been cancelled (check every 10 messages to reduce DB queries)
+                if processed_count % 10 == 0 or processed_count == start_index + 1:
+                    db.session.refresh(bulk_job)
+                    if bulk_job.status == 'cancelled':
+                        print(f"🛑 Job {job_id} has been cancelled. Stopping at {processed_count}/{total_recipients}")
+                        bulk_job.completed_at = datetime.now(ist)
+                        db.session.commit()
+                        return
                 try:
                     # Determine phone number
                     phone_number = None
                     lead_id = None
-                    
+
                     if isinstance(recipient, dict):
                         phone_number = recipient.get('phone_number') or recipient.get('mobile')
                         lead_id = recipient.get('lead_id')
@@ -6058,39 +6180,39 @@ def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str,
                         if lead:
                             phone_number = lead.mobile
                             lead_id = lead.id
-                    
+
                     if not phone_number:
                         failed_count += 1
                         continue
-                    
+
                     # Rate limiting check and wait if needed
                     can_send, wait_time = client.rate_limiter.can_send()
                     if not can_send:
                         time_module.sleep(wait_time)
-                    
+
                     # Get template from cache
                     template_cache = TeleobiTemplateCache.query.filter_by(
                         template_name=template_name,
                         status='Approved'
                     ).first()
-                    
+
                     if not template_cache:
                         print(f"❌ Template '{template_name}' not found in cache")
                         failed_count += 1
                         bulk_job.failed_count = failed_count
                         db.session.commit()
                         continue
-                    
+
                     # Use Teleobi internal template ID (for sending), fallback to WhatsApp template_id
                     template_id = template_cache.teleobi_template_id or template_cache.template_id
-                    
+
                     if not template_id:
                         print(f"❌ Template '{template_name}' has no template ID")
                         failed_count += 1
                         bulk_job.failed_count = failed_count
                         db.session.commit()
                         continue
-                    
+
                     # Send message
                     print(f"📤 Sending to {phone_number} using template '{template_name}' (ID: {template_id}) with variables: {variables}")
                     result = client.send_template_message(
@@ -6100,13 +6222,13 @@ def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str,
                         variables=variables,
                         validate_before_send=True
                     )
-                    
+
                     # Log result
                     if result.success:
                         print(f"✅ Successfully sent to {phone_number}. WA Message ID: {result.wa_message_id}")
                     else:
                         print(f"❌ Failed to send to {phone_number}: {result.error_message}")
-                    
+
                     # Create send record
                     send_record = WhatsAppSend(
                         lead_id=lead_id,
@@ -6123,7 +6245,7 @@ def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str,
                     )
                     db.session.add(send_record)
                     db.session.flush()  # Flush to get the ID, but don't commit yet
-                    
+
                     # Store job ID in variables JSON for easier filtering (temporary solution)
                     # In future, we can add bulk_job_id column to WhatsAppSend
                     if variables:
@@ -6133,18 +6255,18 @@ def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str,
                             send_record.variables = json.dumps(vars_dict)
                         except:
                             pass
-                    
+
                     if result.success:
                         sent_count += 1
                         bulk_job.sent_count = sent_count
                     else:
                         failed_count += 1
                         bulk_job.failed_count = failed_count
-                    
+
                     # Update processed count for progress tracking
                     bulk_job.processed_count = processed_count
                     db.session.commit()
-                    
+
                     # Log progress every 10 messages or at the end
                     if processed_count % 10 == 0 or processed_count == total_recipients:
                         elapsed = (datetime.now(ist) - start_time).total_seconds()
@@ -6152,43 +6274,113 @@ def process_bulk_whatsapp_job(job_id: int, recipients: list, template_name: str,
                         remaining = total_recipients - processed_count
                         eta_seconds = remaining / rate if rate > 0 else 0
                         print(f"📊 Progress: {processed_count}/{total_recipients} ({processed_count*100//total_recipients}%) | Rate: {rate:.2f} msg/s | ETA: {eta_seconds:.0f}s")
-                    
+
                     # Small delay between sends (additional safety)
                     time_module.sleep(0.5)
-                    
+
                 except Exception as e:
-                    print(f"Error processing recipient {recipient}: {e}")
+                    print(f"❌ Error processing recipient {recipient}: {e}")
                     import traceback
                     traceback.print_exc()
                     failed_count += 1
                     bulk_job.failed_count = failed_count
-                    db.session.commit()
+                    # Update processed count even on error so we can resume
+                    bulk_job.processed_count = processed_count
+                    try:
+                        db.session.commit()
+                    except Exception as db_error:
+                        print(f"❌ Database commit error: {db_error}")
+                        db.session.rollback()
+                        # Refresh connection by removing and recreating session
+                        db.session.remove()
+                        # Re-fetch job
+                        bulk_job = WhatsAppBulkJob.query.get(job_id)
+                        if bulk_job:
+                            bulk_job.failed_count = failed_count
+                            bulk_job.processed_count = processed_count
+                            db.session.commit()
                     continue
-            
+
+            # Final check if job was cancelled before finalizing
+            db.session.refresh(bulk_job)
+            if bulk_job.status == 'cancelled':
+                print(f"🛑 Job {job_id} was cancelled. Final status: {sent_count} sent, {failed_count} failed out of {processed_count} processed")
+                return
+
             # Update job status
             bulk_job.status = 'completed' if failed_count == 0 else 'partial'
             bulk_job.completed_at = datetime.now(ist)
             bulk_job.sent_count = sent_count
             bulk_job.failed_count = failed_count
+            bulk_job.processed_count = total_recipients  # Mark as fully processed
             db.session.commit()
-            
-            print(f"✅ Bulk job {job_id} completed: {sent_count} sent, {failed_count} failed")
-            
+
+            print(f"✅ Bulk job {job_id} completed: {sent_count} sent, {failed_count} failed out of {total_recipients} total")
+
         except Exception as e:
-            print(f"❌ Error processing bulk job {job_id}: {e}")
+            print(f"❌ Critical error processing bulk job {job_id}: {e}")
             import traceback
             traceback.print_exc()
-            
-            # Try to update job status to failed
+
+            # Try to update job status - don't mark as failed, keep as processing so it can be resumed
             try:
                 bulk_job = WhatsAppBulkJob.query.get(job_id)
                 if bulk_job:
-                    bulk_job.status = 'failed'
-                    bulk_job.completed_at = datetime.now(ist)
-                    bulk_job.failed_count = len(recipients) if recipients else 0
+                    # Don't mark as failed - keep as processing so recovery can resume it
+                    # Only mark as failed if we haven't processed anything
+                    if (bulk_job.processed_count or 0) == 0:
+                        bulk_job.status = 'failed'
+                        bulk_job.completed_at = datetime.now(ist)
+                    else:
+                        # Keep as processing so it can be resumed
+                        print(f"⚠️  Job {job_id} interrupted at {bulk_job.processed_count}/{bulk_job.total_recipients}. Will be resumed on next check.")
                     db.session.commit()
             except Exception as inner_e:
                 print(f"❌ Failed to update job status: {inner_e}")
+
+def recover_incomplete_jobs():
+    """
+    Check for incomplete bulk jobs and resume them
+    This should be called on application startup
+    """
+    try:
+        with application.app_context():
+            # Find jobs that are stuck in 'processing' status (exclude cancelled jobs)
+            incomplete_jobs = WhatsAppBulkJob.query.filter(
+                WhatsAppBulkJob.status == 'processing',
+                WhatsAppBulkJob.processed_count < WhatsAppBulkJob.total_recipients
+            ).all()
+
+            if incomplete_jobs:
+                print(f"🔄 Found {len(incomplete_jobs)} incomplete job(s), resuming...")
+                import threading
+                for job in incomplete_jobs:
+                    # Check if job is old enough to be considered stuck (more than 5 minutes)
+                    if job.started_at:
+                        time_since_start = (datetime.now(ist) - job.started_at).total_seconds()
+                        if time_since_start > 300:  # 5 minutes
+                            print(f"🔄 Resuming job {job.id} (stuck for {time_since_start:.0f}s, processed {job.processed_count}/{job.total_recipients})")
+                            thread = threading.Thread(
+                                target=process_bulk_whatsapp_job,
+                                args=(job.id,),
+                                daemon=False
+                            )
+                            thread.start()
+                    else:
+                        # Job started but no start time recorded, resume it
+                        print(f"🔄 Resuming job {job.id} (no start time recorded)")
+                        thread = threading.Thread(
+                            target=process_bulk_whatsapp_job,
+                            args=(job.id,),
+                            daemon=False
+                        )
+                        thread.start()
+            else:
+                print("✅ No incomplete jobs found")
+    except Exception as e:
+        print(f"❌ Error in recover_incomplete_jobs: {e}")
+        import traceback
+        traceback.print_exc()
 
 @application.route('/api/whatsapp/teleobi/jobs/<int:job_id>', methods=['GET', 'OPTIONS'])
 @login_required
@@ -6201,21 +6393,21 @@ def api_get_bulk_job_status(job_id):
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         job = WhatsAppBulkJob.query.get_or_404(job_id)
-        
+
         # Check permissions
         if not current_user.is_admin and job.created_by != current_user.id:
             return jsonify({'error': 'Permission denied'}), 403
-        
+
         # Get detailed statistics from send records
         send_records = WhatsAppSend.query.filter(
             WhatsAppSend.template_name == job.template_name,
             WhatsAppSend.created_at >= job.created_at,
             WhatsAppSend.created_at < (job.created_at + timedelta(hours=24))  # Within 24 hours of job creation
         ).all()
-        
+
         # Further filter by checking if variables contain job ID (if stored)
         filtered_records = []
         for record in send_records:
@@ -6230,22 +6422,22 @@ def api_get_bulk_job_status(job_id):
                     filtered_records.append(record)
             else:
                 filtered_records.append(record)
-        
+
         send_records = filtered_records
-        
+
         # Get progress from job itself (real-time during processing)
         # Use processed_count from job for accurate progress
         processed_count = job.processed_count or 0
-        
+
         # Calculate actual counts from send records
         actual_sent = len([s for s in send_records if s.status in ['sent', 'delivered', 'read']])
         delivered_count = len([s for s in send_records if s.status in ['delivered', 'read']])
         read_count = len([s for s in send_records if s.status == 'read'])
         failed_count = len([s for s in send_records if s.status == 'failed'])
-        
+
         # Calculate progress percentage
         progress_percentage = (processed_count / job.total_recipients * 100) if job.total_recipients > 0 else 0
-        
+
         # Calculate ETA if job is processing
         eta_seconds = None
         if job.status == 'processing' and job.started_at and processed_count > 0:
@@ -6255,12 +6447,12 @@ def api_get_bulk_job_status(job_id):
                 remaining = job.total_recipients - processed_count
                 if rate > 0:
                     eta_seconds = remaining / rate
-        
+
         # Calculate rates
         delivery_rate = (delivered_count / actual_sent * 100) if actual_sent > 0 else 0
         read_rate = (read_count / delivered_count * 100) if delivered_count > 0 else 0
         success_rate = (actual_sent / job.total_recipients * 100) if job.total_recipients > 0 else 0
-        
+
         response = jsonify({
             'success': True,
             'job': {
@@ -6287,9 +6479,63 @@ def api_get_bulk_job_status(job_id):
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-        
+
     except Exception as e:
         print(f"Error fetching job status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/whatsapp/teleobi/jobs/<int:job_id>/cancel', methods=['POST', 'OPTIONS'])
+@login_required
+def api_cancel_bulk_job(job_id):
+    """Cancel a bulk send job that is currently processing"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        job = WhatsAppBulkJob.query.get_or_404(job_id)
+
+        # Check permissions
+        if not current_user.is_admin and job.created_by != current_user.id:
+            return jsonify({'error': 'Permission denied'}), 403
+
+        # Only allow cancellation of processing jobs
+        if job.status not in ['pending', 'processing']:
+            return jsonify({
+                'error': f'Cannot cancel job with status: {job.status}',
+                'message': 'Only pending or processing jobs can be cancelled'
+            }), 400
+
+        # Mark job as cancelled
+        old_status = job.status
+        job.status = 'cancelled'
+        job.completed_at = datetime.now(ist)
+        db.session.commit()
+
+        print(f"🛑 Job {job_id} cancelled by user {current_user.id} (was {old_status}, processed {job.processed_count}/{job.total_recipients})")
+
+        response = jsonify({
+            'success': True,
+            'message': 'Job cancelled successfully',
+            'job': {
+                'id': job.id,
+                'status': job.status,
+                'processed_count': job.processed_count,
+                'total_recipients': job.total_recipients
+            }
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    except Exception as e:
+        print(f"Error cancelling job: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @application.route('/api/whatsapp/teleobi/jobs', methods=['GET', 'OPTIONS'])
@@ -6303,20 +6549,20 @@ def api_list_bulk_jobs():
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         # Get limit from query params (default 5)
         limit = request.args.get('limit', 5, type=int)
-        
+
         # Check permissions
         if not current_user.is_admin:
             jobs_query = WhatsAppBulkJob.query.filter_by(created_by=current_user.id).order_by(WhatsAppBulkJob.created_at.desc())
         else:
             jobs_query = WhatsAppBulkJob.query.order_by(WhatsAppBulkJob.created_at.desc())
-        
+
         # Get paginated results (top N most recent)
         jobs = jobs_query.limit(limit).all()
-        
+
         jobs_data = []
         for job in jobs:
             # Get basic statistics from send records (without fetching from Teleobi)
@@ -6329,7 +6575,7 @@ def api_list_bulk_jobs():
                     WhatsAppSend.created_at >= job.created_at,
                     WhatsAppSend.created_at < (job.created_at + timedelta(hours=24))  # Within 24 hours of job creation
                 ).all()
-                
+
                 # Further filter by checking if variables contain job ID (if stored)
                 # This helps distinguish between jobs with same template
                 filtered_records = []
@@ -6349,15 +6595,15 @@ def api_list_bulk_jobs():
                     else:
                         # No variables, include if within time window
                         filtered_records.append(record)
-                
+
                 send_records = filtered_records
-                
+
                 processed_count = len(send_records)
                 actual_sent = len([s for s in send_records if s.status in ['sent', 'delivered', 'read']])
                 delivered_count = len([s for s in send_records if s.status in ['delivered', 'read']])
                 read_count = len([s for s in send_records if s.status == 'read'])
                 failed_count = len([s for s in send_records if s.status == 'failed'])
-                
+
                 delivery_rate = (delivered_count / actual_sent * 100) if actual_sent > 0 else 0
                 read_rate = (read_count / delivered_count * 100) if delivered_count > 0 else 0
                 success_rate = (actual_sent / job.total_recipients * 100) if job.total_recipients > 0 else 0
@@ -6371,7 +6617,7 @@ def api_list_bulk_jobs():
                 delivery_rate = 0
                 read_rate = 0
                 success_rate = 0
-            
+
             jobs_data.append({
                 'id': job.id,
                 'job_name': job.job_name or f'Job #{job.id}',
@@ -6391,7 +6637,7 @@ def api_list_bulk_jobs():
                 'created_at': job.created_at.isoformat() if job.created_at else None,
                 'needs_refresh': True  # Flag to indicate details need to be fetched
             })
-        
+
         response = jsonify({
             'success': True,
             'jobs': jobs_data,
@@ -6401,7 +6647,7 @@ def api_list_bulk_jobs():
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-        
+
     except Exception as e:
         print(f"Error fetching jobs: {e}")
         import traceback
@@ -6419,15 +6665,15 @@ def api_fetch_job_details(job_id):
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         # Get job
         job = WhatsAppBulkJob.query.get_or_404(job_id)
-        
+
         # Check permissions
         if not current_user.is_admin and job.created_by != current_user.id:
             return jsonify({'error': 'Permission denied'}), 403
-        
+
         # Get all send records for this job
         # Filter by template_name and created_at range
         send_records = WhatsAppSend.query.filter(
@@ -6435,7 +6681,7 @@ def api_fetch_job_details(job_id):
             WhatsAppSend.created_at >= job.created_at,
             WhatsAppSend.created_at < (job.created_at + timedelta(hours=24))  # Within 24 hours of job creation
         ).all()
-        
+
         # Further filter by checking if variables contain job ID (if stored)
         filtered_records = []
         for record in send_records:
@@ -6454,23 +6700,23 @@ def api_fetch_job_details(job_id):
             else:
                 # No variables, include if within time window
                 filtered_records.append(record)
-        
+
         send_records = filtered_records
-        
+
         # Get Teleobi client
         client = get_teleobi_client()
         if not client:
             return jsonify({'error': 'Teleobi client not available'}), 500
-        
+
         # Get whatsapp_bot_id from template cache (per-template) or environment (fallback)
         whatsapp_bot_id = None
-        
+
         # PRIORITY 1: Get from template cache (template-specific)
         template_cache = TeleobiTemplateCache.query.filter_by(template_name=job.template_name).first()
         if template_cache and template_cache.whatsapp_business_id:
             whatsapp_bot_id = template_cache.whatsapp_business_id
             print(f"✅ Using template-specific whatsapp_business_id: {whatsapp_bot_id} for template '{job.template_name}'")
-        
+
         # PRIORITY 2: Fallback to environment variable (global, only if template doesn't have it)
         if not whatsapp_bot_id:
             import os
@@ -6481,23 +6727,23 @@ def api_fetch_job_details(job_id):
                     print(f"⚠️ Using global TELEOBI_WHATSAPP_BOT_ID: {whatsapp_bot_id} (template '{job.template_name}' doesn't have specific ID)")
                 except (ValueError, TypeError):
                     pass
-        
+
         if not whatsapp_bot_id:
             print(f"⚠️ Warning: whatsapp_bot_id not found for template '{job.template_name}'. Message status API calls may fail.")
             print(f"   Please sync templates to get per-template whatsapp_business_id, or set TELEOBI_WHATSAPP_BOT_ID in .env file.")
-        
+
         # Fetch status for each message that has a wa_message_id
         updated_count = 0
         for send_record in send_records:
             if send_record.wa_message_id and send_record.status != 'failed':
                 try:
                     print(f"📊 Fetching status for message {send_record.wa_message_id} (current status: {send_record.status})")
-                    
+
                     # Fetch status from Teleobi with whatsapp_bot_id
                     status_data = client.get_message_status(send_record.wa_message_id, whatsapp_bot_id=whatsapp_bot_id)
-                    
+
                     print(f"📊 Status data received: {status_data}")
-                    
+
                     if status_data:
                         # Teleobi API returns: message_status, delivery_status_updated_at, read_time, failed_time, failed_reason
                         # Handle None values properly - message_status can be None
@@ -6507,17 +6753,17 @@ def api_fetch_job_details(job_id):
                         failed_time = status_data.get('failed_time')
                         failed_reason = status_data.get('failed_reason', '')
                         delivery_status_updated_at = status_data.get('delivery_status_updated_at')
-                        
+
                         print(f"📊 Parsed status: {message_status or 'None'}, read_time: {read_time}, failed_time: {failed_time}, delivery_updated: {delivery_status_updated_at}")
-                        
+
                         # If all status fields are None, the message might be too new or status not available yet
                         if not message_status and not read_time and not failed_time and not delivery_status_updated_at:
                             print(f"⚠️ No status information available yet for message {send_record.wa_message_id}. Message may be too new or status not updated.")
                             continue
-                        
+
                         # Update status based on Teleobi response
                         old_status = send_record.status
-                        
+
                         # Check for read status first (highest priority)
                         if read_time:
                             send_record.status = 'read'
@@ -6531,7 +6777,7 @@ def api_fetch_job_details(job_id):
                                 except:
                                     send_record.read_at = datetime.now(ist)
                             print(f"✅ Updated to READ status")
-                        
+
                         # Then check for delivered (check both message_status and delivery_status_updated_at)
                         elif message_status == 'delivered' or delivery_status_updated_at:
                             send_record.status = 'delivered'
@@ -6545,13 +6791,13 @@ def api_fetch_job_details(job_id):
                                 else:
                                     send_record.delivered_at = datetime.now(ist)
                             print(f"✅ Updated to DELIVERED status")
-                        
+
                         # Check for failed
                         elif message_status == 'failed' or failed_time:
                             send_record.status = 'failed'
                             send_record.error_message = failed_reason or 'Unknown error'
                             print(f"❌ Updated to FAILED status: {failed_reason}")
-                        
+
                         # Keep sent status if still sent or if status is not available yet
                         elif message_status == 'sent' or not message_status:
                             # If message_status is empty/None but we have a wa_message_id, keep as sent
@@ -6563,37 +6809,37 @@ def api_fetch_job_details(job_id):
                                 print(f"📤 Status not available yet, keeping as SENT")
                             else:
                                 print(f"📤 Status remains SENT")
-                        
+
                         if old_status != send_record.status:
                             updated_count += 1
                             print(f"🔄 Status changed: {old_status} -> {send_record.status}")
                     else:
                         print(f"⚠️ No status data returned for message {send_record.wa_message_id}")
-                            
+
                 except Exception as e:
                     print(f"❌ Error fetching status for message {send_record.wa_message_id}: {e}")
                     import traceback
                     traceback.print_exc()
                     continue
-        
+
         db.session.commit()
-        
+
         # Recalculate statistics
         send_records = WhatsAppSend.query.filter(
             WhatsAppSend.template_name == job.template_name,
             WhatsAppSend.created_at >= job.created_at
         ).all()
-        
+
         processed_count = len(send_records)
         actual_sent = len([s for s in send_records if s.status in ['sent', 'delivered', 'read']])
         delivered_count = len([s for s in send_records if s.status in ['delivered', 'read']])
         read_count = len([s for s in send_records if s.status == 'read'])
         failed_count = len([s for s in send_records if s.status == 'failed'])
-        
+
         delivery_rate = (delivered_count / actual_sent * 100) if actual_sent > 0 else 0
         read_rate = (read_count / delivered_count * 100) if delivered_count > 0 else 0
         success_rate = (actual_sent / job.total_recipients * 100) if job.total_recipients > 0 else 0
-        
+
         response = jsonify({
             'success': True,
             'job': {
@@ -6616,7 +6862,7 @@ def api_fetch_job_details(job_id):
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-        
+
     except Exception as e:
         print(f"Error fetching job details: {e}")
         import traceback
@@ -6634,20 +6880,20 @@ def api_template_preview():
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         data = request.get_json()
         template_name = data.get('template_name')
         variables = data.get('variables', {})
-        
+
         if not template_name:
             return jsonify({'error': 'Template name is required'}), 400
-        
+
         # Get template from cache
         template = TeleobiTemplateCache.query.filter_by(template_name=template_name).first()
         if not template:
             return jsonify({'error': 'Template not found'}), 404
-        
+
         # Parse template JSON
         template_json = {}
         if template.template_json:
@@ -6655,7 +6901,7 @@ def api_template_preview():
                 template_json = json.loads(template.template_json) if isinstance(template.template_json, str) else template.template_json
             except:
                 pass
-        
+
         # Build preview
         preview = {
             'header': None,
@@ -6663,11 +6909,11 @@ def api_template_preview():
             'footer': None,
             'buttons': None
         }
-        
+
         components = template_json.get('components', [])
         for component in components:
             comp_type = component.get('type')
-            
+
             if comp_type == 'header':
                 format_type = component.get('format', '')
                 if format_type == 'image' and variables.get('header_image_url'):
@@ -6681,7 +6927,7 @@ def api_template_preview():
                         'type': 'text',
                         'text': text
                     }
-            
+
             elif comp_type == 'body':
                 body_text = component.get('text', '')
                 # Replace variables {{1}}, {{2}}, etc. with actual values
@@ -6694,13 +6940,13 @@ def api_template_preview():
                         var_num = key.replace('var_', '')
                         body_text = body_text.replace(f'{{{{{var_num}}}}}', value or f'[Variable {var_num}]')
                 preview['body'] = body_text
-            
+
             elif comp_type == 'footer':
                 preview['footer'] = component.get('text', '')
-            
+
             elif comp_type == 'button':
                 preview['buttons'] = component.get('buttons', [])
-        
+
         response = jsonify({
             'success': True,
             'preview': preview,
@@ -6709,7 +6955,7 @@ def api_template_preview():
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-        
+
     except Exception as e:
         print(f"Error generating preview: {e}")
         import traceback
@@ -6727,17 +6973,17 @@ def api_get_quality_metrics():
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     try:
         client = get_teleobi_client()
         if not client:
             return jsonify({'error': 'Teleobi client not available'}), 500
-        
+
         metrics = client.get_quality_metrics()
-        
+
         response = jsonify({
             'success': True,
             'metrics': metrics
@@ -6745,7 +6991,7 @@ def api_get_quality_metrics():
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-        
+
     except Exception as e:
         print(f"Error fetching quality metrics: {e}")
         return jsonify({'error': str(e)}), 500
@@ -6764,19 +7010,19 @@ def api_filter_leads_for_whatsapp():
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-    
+
     try:
         data = request.get_json() or {}
-        
+
         # Build query
         query = Lead.query
-        
+
         # Apply user filter
         if not current_user.is_admin:
             query = query.filter(Lead.creator_id == current_user.id)
         elif data.get('user_id'):
             query = query.filter(Lead.creator_id == data['user_id'])
-        
+
         # Filter by followup date
         if data.get('followup_date'):
             try:
@@ -6791,11 +7037,11 @@ def api_filter_leads_for_whatsapp():
                 )
             except ValueError:
                 pass
-        
+
         # Filter by status
         if data.get('status'):
             query = query.filter(Lead.status == data['status'])
-        
+
         # Filter by created date
         if data.get('created_date'):
             try:
@@ -6810,10 +7056,10 @@ def api_filter_leads_for_whatsapp():
                 )
             except ValueError:
                 pass
-        
+
         # Get leads
         leads = query.limit(10000).all()  # Max 10,000 for safety
-        
+
         leads_data = []
         for lead in leads:
             leads_data.append({
@@ -6823,7 +7069,7 @@ def api_filter_leads_for_whatsapp():
                 'status': lead.status,
                 'followup_date': lead.followup_date.isoformat() if lead.followup_date else None
             })
-        
+
         response = jsonify({
             'success': True,
             'leads': leads_data,
@@ -6832,7 +7078,7 @@ def api_filter_leads_for_whatsapp():
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
-        
+
     except Exception as e:
         print(f"Error filtering leads: {e}")
         import traceback
@@ -6848,19 +7094,25 @@ if __name__ == '__main__':
         print(f"❌ Failed to initialize database: {e}")
         import traceback
         traceback.print_exc()
-    
+
+    # Recover incomplete jobs on startup (for direct run, not gunicorn)
+    try:
+        recover_incomplete_jobs()
+    except Exception as e:
+        print(f"⚠️  Failed to recover incomplete jobs: {e}")
+
     # Start scheduler for daily snapshots
     # Note: In production with gunicorn, this will run in each worker
     # Consider using a separate scheduler process or Redis-based locking
     scheduler_instance = init_scheduler()
-    
+
     port = int(os.environ.get('PORT', 5000))
     print(f"Starting application on port {port}")
-    
+
     try:
         # Run without debug mode for better stability
         application.run(host='0.0.0.0', port=port, debug=False)
     finally:
         # Shutdown scheduler on app exit
         if scheduler_instance:
-            scheduler_instance.shutdown() 
+            scheduler_instance.shutdown()

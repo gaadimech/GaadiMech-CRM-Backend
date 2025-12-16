@@ -22,15 +22,15 @@ def test_api_connection():
     print(f"Phone Number ID: {TELEOBI_PHONE_NUMBER_ID}")
     print(f"Auth Token: {TELEOBI_AUTH_TOKEN[:20]}..." if TELEOBI_AUTH_TOKEN else "Auth Token: NOT SET")
     print()
-    
+
     if not TELEOBI_AUTH_TOKEN:
         print("❌ ERROR: TELEOBI_AUTH_TOKEN not found in environment")
         return False
-    
+
     if not TELEOBI_PHONE_NUMBER_ID:
         print("❌ ERROR: TELEOBI_PHONE_NUMBER_ID not found in environment")
         return False
-    
+
     # Test 1: Fetch templates
     print("Test 1: Fetching templates...")
     try:
@@ -39,17 +39,17 @@ def test_api_connection():
             'apiToken': TELEOBI_AUTH_TOKEN,
             'phone_number_id': TELEOBI_PHONE_NUMBER_ID
         }
-        
+
         response = requests.post(url, data=params, timeout=10)
-        
+
         print(f"Status Code: {response.status_code}")
         print(f"Response Headers: {dict(response.headers)}")
-        
+
         if response.status_code == 200:
             data = response.json()
             print("✅ SUCCESS: API connection working!")
             print(f"Response Status: {data.get('status')}")
-            
+
             if 'message' in data:
                 template_data = data.get('message', {})
                 if isinstance(template_data, dict):
@@ -59,13 +59,13 @@ def test_api_connection():
                     print(f"Status: {template_data.get('status')}")
                 else:
                     print(f"Templates returned: {len(template_data) if isinstance(template_data, list) else 'N/A'}")
-            
+
             return True
         else:
             print(f"❌ ERROR: API returned status {response.status_code}")
             print(f"Response: {response.text}")
             return False
-            
+
     except requests.exceptions.RequestException as e:
         print(f"❌ ERROR: Request failed - {str(e)}")
         return False

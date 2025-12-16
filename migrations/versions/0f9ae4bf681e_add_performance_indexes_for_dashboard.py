@@ -21,13 +21,13 @@ def upgrade():
     with op.batch_alter_table('lead', schema=None) as batch_op:
         # Index for mobile number searches (used in followups page)
         batch_op.create_index('idx_lead_mobile', ['mobile'], unique=False)
-        
+
         # Index for car registration searches
         batch_op.create_index('idx_lead_car_reg', ['car_registration'], unique=False)
-        
+
         # Compound index for status and created_at (for reporting)
         batch_op.create_index('idx_lead_status_created', ['status', 'created_at'], unique=False)
-        
+
         # Compound index for status and followup_date (for dashboard filtering)
         batch_op.create_index('idx_lead_status_followup', ['status', 'followup_date'], unique=False)
 

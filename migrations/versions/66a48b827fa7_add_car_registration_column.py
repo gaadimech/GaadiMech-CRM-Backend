@@ -1,7 +1,7 @@
 """Add car_registration column
 
 Revision ID: 66a48b827fa7
-Revises: 
+Revises:
 Create Date: 2025-02-07 15:26:56.391649
 
 """

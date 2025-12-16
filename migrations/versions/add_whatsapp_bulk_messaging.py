@@ -1,7 +1,7 @@
 """Add WhatsApp bulk messaging tables
 
 Revision ID: add_whatsapp_bulk_messaging
-Revises: 
+Revises:
 Create Date: 2025-01-27
 
 """
@@ -97,14 +97,14 @@ def downgrade():
     op.drop_index('idx_bulk_job_created', table_name='whatsapp_bulk_job')
     op.drop_index('idx_bulk_job_status', table_name='whatsapp_bulk_job')
     op.drop_table('whatsapp_bulk_job')
-    
+
     op.drop_index('idx_whatsapp_send_wa_id', table_name='whatsapp_send')
     op.drop_index('idx_whatsapp_send_created', table_name='whatsapp_send')
     op.drop_index('idx_whatsapp_send_template', table_name='whatsapp_send')
     op.drop_index('idx_whatsapp_send_phone', table_name='whatsapp_send')
     op.drop_index('idx_whatsapp_send_status', table_name='whatsapp_send')
     op.drop_table('whatsapp_send')
-    
+
     op.drop_index('idx_template_synced', table_name='teleobi_template_cache')
     op.drop_index('idx_template_status', table_name='teleobi_template_cache')
     op.drop_index('idx_template_type', table_name='teleobi_template_cache')

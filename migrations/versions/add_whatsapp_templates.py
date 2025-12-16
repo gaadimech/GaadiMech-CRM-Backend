@@ -28,7 +28,7 @@ def upgrade():
     sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    
+
     # Create index for better performance
     with op.batch_alter_table('whatsapp_template', schema=None) as batch_op:
         batch_op.create_index('idx_whatsapp_template_created_by', ['created_by'], unique=False)
