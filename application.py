@@ -926,6 +926,13 @@ def utc_to_ist(utc_dt):
     ist_tz = pytz.timezone('Asia/Kolkata')
     return utc_dt.astimezone(ist_tz)
 
+def to_ist_iso(dt):
+    """Convert datetime to IST ISO string for API responses"""
+    if dt is None:
+        return None
+    ist_dt = utc_to_ist(dt)
+    return ist_dt.isoformat() if ist_dt else None
+
 def get_initial_followup_count(user_id, date):
     daily_count = DailyFollowupCount.query.filter_by(
         user_id=user_id,
@@ -2167,8 +2174,8 @@ def api_followups_today():
                 'remarks': lead.remarks or '',
                 'creator_id': lead.creator_id,
                 'creator_name': creator_name,
-                'created_at': lead.created_at.isoformat() if lead.created_at else None,
-                'modified_at': lead.modified_at.isoformat() if lead.modified_at else None,
+                'created_at': to_ist_iso(lead.created_at),
+                'modified_at': to_ist_iso(lead.modified_at),
                 'overdue': is_overdue
             })
 
@@ -2538,8 +2545,8 @@ def api_followups():
                 'remarks': lead.remarks or '',
                 'creator_id': lead.creator_id,
                 'creator_name': creator_name,
-                'created_at': lead.created_at.isoformat() if lead.created_at else None,
-                'modified_at': lead.modified_at.isoformat() if lead.modified_at else None
+                'created_at': to_ist_iso(lead.created_at),
+                'modified_at': to_ist_iso(lead.modified_at)
             })
 
         return jsonify({
@@ -2588,8 +2595,8 @@ def api_get_followup(lead_id):
             'remarks': lead.remarks or '',
             'creator_id': lead.creator_id,
             'creator_name': creator_name,
-            'created_at': lead.created_at.isoformat() if lead.created_at else None,
-            'modified_at': lead.modified_at.isoformat() if lead.modified_at else None
+            'created_at': to_ist_iso(lead.created_at),
+            'modified_at': to_ist_iso(lead.modified_at)
         }
 
         return jsonify({
@@ -2666,7 +2673,7 @@ def api_update_followup(lead_id):
                 'followup_date': lead.followup_date.isoformat() if lead.followup_date else None,
                 'status': lead.status,
                 'remarks': lead.remarks,
-                'modified_at': lead.modified_at.isoformat() if lead.modified_at else None,
+                'modified_at': to_ist_iso(lead.modified_at),
             }
         })
 
@@ -3164,7 +3171,7 @@ def api_admin_unassigned_leads():
                 'scheduled_date': scheduled_date_str,
                 'source': lead.source or '',
                 'remarks': lead.remarks or '',
-                'created_at': lead.created_at.isoformat() if lead.created_at else None,
+                'created_at': to_ist_iso(lead.created_at),
                 'assigned_to': assigned_to,
                 'added_to_crm': added_to_crm,  # Track if lead has been added to CRM
                 'assigned_date': assigned_date,
@@ -3264,8 +3271,8 @@ def api_admin_unassigned_lead_details(lead_id):
                     'car_registration': closest_lead.car_registration or '',
                     'followup_date': followup_date_str,
                     'remarks': closest_lead.remarks or '',
-                    'created_at': closest_lead.created_at.isoformat() if closest_lead.created_at else None,
-                    'modified_at': closest_lead.modified_at.isoformat() if closest_lead.modified_at else None
+                    'created_at': to_ist_iso(closest_lead.created_at),
+                    'modified_at': to_ist_iso(closest_lead.modified_at)
                 }
 
         # Format assigned_date in IST
@@ -3284,7 +3291,7 @@ def api_admin_unassigned_lead_details(lead_id):
                 'scheduled_date': scheduled_date_str,
                 'source': lead.source or '',
                 'remarks': lead.remarks or '',
-                'created_at': lead.created_at.isoformat() if lead.created_at else None,
+                'created_at': to_ist_iso(lead.created_at),
             },
             'assignment': {
                 'assigned_to': User.query.get(current_assignment.assigned_to_user_id).name if current_assignment else None,
@@ -3724,8 +3731,8 @@ def api_admin_leads_manipulation_search():
                     'remarks': lead.remarks or '',
                     'creator_id': lead.creator_id,
                     'creator_name': creator_name,
-                    'created_at': lead.created_at.isoformat() if lead.created_at else None,
-                    'modified_at': lead.modified_at.isoformat() if lead.modified_at else None
+                    'created_at': to_ist_iso(lead.created_at),
+                    'modified_at': to_ist_iso(lead.modified_at)
                 })
 
             offset += batch_size
@@ -6441,7 +6448,11 @@ def api_get_bulk_job_status(job_id):
         # Calculate ETA if job is processing
         eta_seconds = None
         if job.status == 'processing' and job.started_at and processed_count > 0:
-            elapsed = (datetime.now(ist) - job.started_at).total_seconds()
+            # Handle timezone-naive vs timezone-aware datetimes
+            started_at = job.started_at
+            if started_at.tzinfo is None:
+                started_at = ist.localize(started_at)
+            elapsed = (datetime.now(ist) - started_at).total_seconds()
             if elapsed > 0:
                 rate = processed_count / elapsed  # messages per second
                 remaining = job.total_recipients - processed_count
