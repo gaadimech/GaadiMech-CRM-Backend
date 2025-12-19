@@ -1,41 +1,53 @@
-# Python
+# Elastic Beanstalk ignore file
+# Files and directories to exclude from deployment
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-venv/
-env/
-ENV/
-.venv
 
-# IDE
+# Backup files
+*.bak
+*.backup
+application_backup.py
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Documentation (optional - can include if needed)
+*.md
+!README.md
+
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Local files
-local_crm.db
-*.db
-.env
-.env.local
-
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
-# Git
+# Git (if not using git deployment)
 .git/
 .gitignore
 
-# Documentation
-*.md
-!README.md
+# Logs
+*.log
 
+# Environment files (should use EB environment variables instead)
+.env
+.env.local
+
+# Development files
+run_local.py

@@ -1,37 +1,28 @@
-# ============================================================================
-# REFACTORED IMPORTS - Using new modular structure
-# ============================================================================
-# Core Flask imports
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, make_response, send_from_directory, send_file
-from flask_login import login_user, login_required, logout_user, current_user, UserMixin
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_cors import CORS
 from datetime import datetime, timedelta, time
+from werkzeug.security import generate_password_hash, check_password_hash
+from urllib.parse import quote_plus
+import re
+import os
+import sys
+import time as time_module
+from dotenv import load_dotenv
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_migrate import Migrate
+from pytz import timezone
+import pytz
 from sqlalchemy import text
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import json
 from pywebpush import webpush, WebPushException
-import pytz
-import os
-import sys
-import time as time_module
 
-# Import from new modular structure
-from config import application, db, login_manager, limiter, ist
-from models import (
-    User, Lead, UnassignedLead, TeamAssignment, DailyFollowupCount,
-    WorkedLead, Template, LeadScore, CallLog, WhatsAppTemplate,
-    CustomerNameCounter, TeleobiTemplateCache, WhatsAppSend, WhatsAppBulkJob,
-    PushSubscription
-)
-from utils import normalize_mobile_number, utc_to_ist, to_ist_iso, USER_MOBILE_MAPPING
-from services.database import init_database
-
-# Import route blueprints
-from routes.auth import auth_bp
-
-# Register blueprints
-application.register_blueprint(auth_bp)
+# Load environment variables
+load_dotenv()
 
 # Try to import text_parser with fallback
 try:
@@ -40,33 +31,650 @@ except ImportError:
     def parse_customer_text(text):
         return {"error": "Text parser not available"}
 
+application = Flask(__name__)
+application.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'GaadiMech2024!')
+
+# Configure CORS for frontend API requests
+# In production, frontend and backend are on the same domain, so CORS should not be needed
+# However, we configure it to handle any edge cases
+IS_PRODUCTION = os.getenv('FLASK_ENV') == 'production' or os.getenv('EB_ENVIRONMENT') is not None
+
+# Use a simple CORS configuration
+# For same-origin requests, CORS headers are ignored by the browser
+# For cross-origin, we allow all origins but without credentials (cookies work via same-origin anyway)
+if IS_PRODUCTION:
+    # For production: Use exact Elastic Beanstalk origin with credentials support
+    # The frontend uses credentials: "include" for session cookies
+    # Get the origin from environment or use the known EB URL
+    EB_ORIGIN_STR = os.getenv('EB_ORIGIN', 'http://gaadimech-crm-unified.eba-ftgmu9fp.ap-south-1.elasticbeanstalk.com')
+    # Parse comma-separated origins (e.g., "https://crm.gaadimech.com,http://crm.gaadimech.com")
+    EB_ORIGINS = [origin.strip() for origin in EB_ORIGIN_STR.split(',') if origin.strip()]
+    print(f"CORS configured for origins: {EB_ORIGINS}")
+    CORS(application,
+         origins=EB_ORIGINS,  # List of allowed origins
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+         allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
+         supports_credentials=True,  # Required for credentials: "include" in frontend
+         max_age=3600,
+         automatic_options=True)
+else:
+    # In development, allow localhost origins with credentials
+    CORS(application,
+         origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+         allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
+         supports_credentials=True,
+         max_age=3600,
+         automatic_options=True)
+
+# Database configuration with better error handling
+# IMPORTANT: Always use RDS_HOST from environment, not from DATABASE_URL
+# This ensures we use the correct database hostname
+RDS_HOST = os.getenv("RDS_HOST", "crm-portal-db.cnewyw0y0leb.ap-south-1.rds.amazonaws.com")
+RDS_DB = os.getenv("RDS_DB", "crmportal")
+RDS_USER = os.getenv("RDS_USER", "crmadmin")
+RDS_PASSWORD = os.getenv("RDS_PASSWORD", "GaadiMech2024!")
+RDS_PORT = os.getenv("RDS_PORT", "5432")
+
+# URL-encode the password to handle special characters like ! @ # etc.
+# The "!" in "GaadiMech2024!" needs to be encoded as "%21" in the connection URL
+RDS_PASSWORD_ENCODED = quote_plus(RDS_PASSWORD)
+
+# Build DATABASE_URL from individual components to ensure correct hostname
+# Use URL-encoded password to prevent special character issues
+DATABASE_URL = f"postgresql+psycopg2://{RDS_USER}:{RDS_PASSWORD_ENCODED}@{RDS_HOST}:{RDS_PORT}/{RDS_DB}"
+
+# Debug: Print actual password being used (without exposing full password)
+print(f"RDS Password (first 5 chars): {RDS_PASSWORD[:5]}...")
+print(f"RDS Password Encoded: {RDS_PASSWORD_ENCODED[:10]}...")
+
+# Validate that we're using the correct database hostname
+if "gaadimech-crm-db" in DATABASE_URL:
+    print(f"ERROR: Wrong database hostname detected! Fixing...")
+    # Replace wrong hostname with correct one
+    DATABASE_URL = DATABASE_URL.replace("gaadimech-crm-db", "crm-portal-db")
+    print(f"Fixed DATABASE_URL to use correct hostname")
+
+# Handle postgres:// to postgresql+psycopg2:// conversion
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+
+print(f"Database URL configured: {DATABASE_URL[:80]}...")
+print(f"Database Host: {RDS_HOST}")
+
+application.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+application.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# AWS optimized database settings
+# RDS requires SSL encryption - use 'require' instead of 'prefer'
+application.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_size': 5,
+    'pool_recycle': 1800,
+    'pool_pre_ping': True,
+    'connect_args': {
+        'connect_timeout': 30,
+        'sslmode': 'require'  # Changed from 'prefer' to 'require' - RDS requires SSL
+    }
+}
+
+# Session configuration
+# Detect if running in production with HTTPS
+IS_PRODUCTION = os.getenv('FLASK_ENV') == 'production'
+FORCE_HTTPS = os.getenv('FORCE_HTTPS', 'false').lower() == 'true'
+
+# Check if we're behind a proxy that terminates HTTPS (Elastic Beanstalk ALB)
+# If X-Forwarded-Proto is https, then cookies should be secure
+# Otherwise, if we're on HTTP, cookies should NOT be secure
+USE_SECURE_COOKIES = FORCE_HTTPS or (IS_PRODUCTION and os.getenv('USE_SECURE_COOKIES', 'false').lower() == 'true')
+
+# For HTTP deployments (like Elastic Beanstalk without HTTPS), we need insecure cookies
+# Secure cookies only work over HTTPS, and will be rejected by browsers on HTTP
+# This is the KEY DIFFERENCE between local (HTTP, insecure cookies work) and AWS (HTTP, secure cookies fail)
+application.config.update(
+    SESSION_COOKIE_SECURE=False,  # Set to False for HTTP - this is why it works locally but not on AWS!
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_DOMAIN=None,  # None means cookie is set for current domain (works for EB subdomains)
+    REMEMBER_COOKIE_SECURE=False,  # Set to False for HTTP
+    REMEMBER_COOKIE_HTTPONLY=True,
+    REMEMBER_COOKIE_DURATION=timedelta(hours=24),
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24)
+)
+
+# Initialize extensions
+db = SQLAlchemy(application)
+migrate = Migrate(application, db)
+login_manager = LoginManager()
+login_manager.init_app(application)
+login_manager.login_view = 'login'
+login_manager.session_protection = "basic"
+login_manager.refresh_view = "login"
+login_manager.needs_refresh_message = "Please login again to confirm your identity"
+login_manager.needs_refresh_message_category = "info"
+
+# Test database connection on startup (works with gunicorn)
+def test_database_connection():
+    """Test database connection on application startup"""
+    try:
+        with application.app_context():
+            # Simple query to test connection
+            db.session.execute(text("SELECT 1"))
+            db.session.commit()
+            print("✅ Database connection test successful")
+            return True
+    except Exception as e:
+        print(f"❌ Database connection test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+# Test connection when module is imported (runs with gunicorn)
+test_database_connection()
+
 # Simple cache
 dashboard_cache_store = {}
 
-# ============================================================================
-# DATABASE MODELS - Now imported from models.py
-# ============================================================================
-# All models are now in models.py - imported above
-# Models are imported at the top of this file from models.py
+# Configure rate limiter with fallback
+try:
+    limiter = Limiter(
+        key_func=get_remote_address,
+        app=application,
+        storage_uri="memory://"
+    )
+except Exception as e:
+    print(f"Rate limiter initialization failed: {e}")
+    # Create a dummy limiter for deployment
+    class DummyLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+    limiter = DummyLimiter()
 
-# ============================================================================
-# USER LOADER - Required for Flask-Login
-# ============================================================================
+# Timezone
+ist = timezone('Asia/Kolkata')
+
+def normalize_mobile_number(mobile):
+    """
+    Normalize mobile number to accept three formats:
+    1. +91XXXXXXXXXX (13 characters: +91 + 10 digits)
+    2. XXXXXXXXXX (10 digits)
+    3. 91XXXXXXXXXX (12 digits: 91 + 10 digits)
+
+    Returns normalized mobile number (10 digits) or None if invalid.
+    Accepts any 10-digit number to support old leads that may not follow
+    the standard Indian mobile number format (starting with 6-9).
+    """
+    if not mobile:
+        return None
+
+    # Remove all non-digit characters except +
+    cleaned = re.sub(r'[^\d+]', '', str(mobile))
+
+    # Handle +91 format
+    if cleaned.startswith('+91'):
+        digits = cleaned[3:]  # Remove +91
+        if len(digits) == 10:
+            return digits
+    # Handle 91XXXXXXXXXX format
+    elif cleaned.startswith('91'):
+        digits = cleaned[2:]  # Remove 91
+        if len(digits) == 10:
+            return digits
+    # Handle XXXXXXXXXX format (10 digits)
+    elif len(cleaned) == 10:
+        return cleaned
+
+    return None
+
+# Mobile mapping
+USER_MOBILE_MAPPING = {
+    'Hemlata': '9672562111',
+    'Sneha': '+919672764111'
+}
+
+# Database Models
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)  # Increased length for hashed passwords
+    name = db.Column(db.String(100), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False)
+    # Note: User mobile numbers are stored in USER_MOBILE_MAPPING, not in database
+    leads = db.relationship('Lead', backref='creator', lazy=True)
+
+    def set_password(self, password):
+        """Hash password before storing"""
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        """Verify password against hash"""
+        return check_password_hash(self.password_hash, password)
+
+class DailyFollowupCount(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    initial_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+
+    __table_args__ = (db.UniqueConstraint('date', 'user_id', name='unique_daily_count'),)
+
+class Lead(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_name = db.Column(db.String(100), nullable=False)
+    mobile = db.Column(db.String(15), nullable=False)
+    car_registration = db.Column(db.String(20), nullable=True)
+    car_model = db.Column(db.String(100), nullable=True)
+    followup_date = db.Column(db.DateTime, nullable=False)
+    remarks = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default='Needs Followup')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    modified_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            status.in_(['New Lead', 'Did Not Pick Up', 'Needs Followup', 'Confirmed', 'Open', 'Completed', 'Feedback', 'Dead Lead']),
+            name='valid_status'
+        ),
+    )
+
+class UnassignedLead(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    mobile = db.Column(db.String(15), nullable=False)
+    customer_name = db.Column(db.String(100), nullable=True)
+    car_manufacturer = db.Column(db.String(50), nullable=True)
+    car_model = db.Column(db.String(50), nullable=True)
+    pickup_type = db.Column(db.String(20), nullable=True)  # 'Pickup' or 'Self Walkin'
+    service_type = db.Column(db.String(50), nullable=True)
+    scheduled_date = db.Column(db.DateTime, nullable=True)
+    source = db.Column(db.String(30), nullable=True)  # 'WhatsApp', 'Chatbot', 'Website', 'Social Media'
+    remarks = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    # Relationship to team assignments
+    assignments = db.relationship('TeamAssignment', backref='unassigned_lead', lazy=True)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            pickup_type.in_(['Pickup', 'Self Walkin']),
+            name='valid_pickup_type'
+        ),
+        db.CheckConstraint(
+            service_type.in_(['Express Car Service', 'Dent Paint', 'AC Service', 'Car Wash', 'Repairs']),
+            name='valid_service_type'
+        ),
+        db.CheckConstraint(
+            source.in_(['WhatsApp', 'Chatbot', 'Website', 'Social Media']),
+            name='valid_source'
+        ),
+    )
+
+class TeamAssignment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    unassigned_lead_id = db.Column(db.Integer, db.ForeignKey('unassigned_lead.id'), nullable=False)
+    assigned_to_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    assigned_date = db.Column(db.Date, nullable=False)
+    assigned_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    assigned_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='Assigned')
+    processed_at = db.Column(db.DateTime, nullable=True)
+    added_to_crm = db.Column(db.Boolean, default=False)
+
+    # Relationships
+    assigned_to = db.relationship('User', foreign_keys=[assigned_to_user_id], backref='assigned_leads')
+    assigned_by_user = db.relationship('User', foreign_keys=[assigned_by])
+
+    __table_args__ = (
+        db.CheckConstraint(
+            status.in_(['Assigned', 'Contacted', 'Added to CRM', 'Ignored']),
+            name='valid_assignment_status'
+        ),
+    )
+
+class PushSubscription(db.Model):
+    """Store push notification subscriptions for users"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    endpoint = db.Column(db.Text, nullable=False)
+    p256dh = db.Column('p256dh_key', db.Text, nullable=False)  # Public key (mapped to p256dh_key in DB)
+    auth = db.Column('auth_key', db.Text, nullable=False)  # Auth secret (mapped to auth_key in DB)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    # Note: updated_at column doesn't exist in current DB structure
+
+    # Relationship
+    user = db.relationship('User', backref='push_subscriptions')
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'endpoint', name='unique_user_endpoint'),
+    )
+
+class WorkedLead(db.Model):
+    """
+    Tracks when a lead has been worked upon by recording followup date changes.
+    This is used to calculate completion rates and track user performance.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    work_date = db.Column(db.Date, nullable=False)  # Date when the work was done
+    old_followup_date = db.Column(db.DateTime, nullable=True)  # Previous followup date
+    new_followup_date = db.Column(db.DateTime, nullable=False)  # New followup date
+    worked_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+
+    # Relationships
+    lead = db.relationship('Lead', backref='worked_entries')
+    user = db.relationship('User', backref='worked_leads')
+
+    __table_args__ = (
+        db.Index('idx_worked_lead_user_date', 'user_id', 'work_date'),
+    )
+
+class Template(db.Model):
+    """
+    Pre-defined message templates for quick remarks entry.
+    Helps telecallers save time by reusing common messages.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(50), nullable=True)  # e.g., 'Interested', 'Not Interested', 'Callback', 'General'
+    is_global = db.Column(db.Boolean, default=True)  # True = available to all, False = personal
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    usage_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+
+    creator = db.relationship('User', backref='templates')
+
+class LeadScore(db.Model):
+    """
+    Stores calculated lead scores for prioritization in calling queue.
+    Score is calculated based on multiple factors.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=False, unique=True)
+    score = db.Column(db.Integer, default=0)  # 0-100
+    priority = db.Column(db.String(20), default='Medium')  # High, Medium, Low
+
+    # Score factors
+    overdue_score = db.Column(db.Integer, default=0)
+    status_score = db.Column(db.Integer, default=0)
+    engagement_score = db.Column(db.Integer, default=0)
+    recency_score = db.Column(db.Integer, default=0)
+
+    last_calculated = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+
+    lead = db.relationship('Lead', backref='lead_score', uselist=False)
+
+    __table_args__ = (
+        db.Index('idx_lead_score_priority', 'priority', 'score'),
+    )
+
+class CallLog(db.Model):
+    """
+    Tracks all call activities for analytics and audit trail.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=True)  # Nullable for non-lead calls
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    # Call tracking fields
+    call_sid = db.Column(db.String(100), unique=True, nullable=True)  # Call SID (for external call services)
+    from_number = db.Column(db.String(20))  # Caller ID
+    to_number = db.Column(db.String(20))  # User's number
+    customer_number = db.Column(db.String(20))  # Customer's number
+
+    # Call metadata
+    direction = db.Column(db.String(20), nullable=False, default='outbound')  # 'outbound', 'inbound'
+    status = db.Column(db.String(30), nullable=False, default='initiated')  # 'initiated', 'ringing', 'answered', 'completed', 'failed', 'busy', 'no-answer'
+    duration = db.Column(db.Integer, default=0)  # in seconds
+    notes = db.Column(db.Text)
+    recording_url = db.Column(db.String(500))  # URL to call recording if available
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(pytz.UTC))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(pytz.UTC), onupdate=lambda: datetime.now(pytz.UTC))
+
+    # Legacy fields for backwards compatibility
+    call_type = db.Column(db.String(20))  # Deprecated - use 'direction' instead
+    call_status = db.Column(db.String(30))  # Deprecated - use 'status' instead
+    call_started_at = db.Column(db.DateTime)  # Deprecated - use 'created_at' instead
+    call_ended_at = db.Column(db.DateTime)  # Deprecated - use 'updated_at' instead
+
+    lead = db.relationship('Lead', backref='call_logs')
+    user = db.relationship('User', backref='call_logs')
+
+    __table_args__ = (
+        db.Index('idx_call_log_user_date', 'user_id', 'created_at'),
+        db.Index('idx_call_log_lead', 'lead_id'),
+        db.Index('idx_call_log_status', 'status'),
+        db.Index('idx_call_log_sid', 'call_sid'),
+    )
+
+class WhatsAppTemplate(db.Model):
+    """
+    Pre-defined WhatsApp message templates for quick customer communication.
+    Users can select a template when clicking WhatsApp button, and it will be prefilled in the chat.
+    """
+    __tablename__ = 'whatsapp_template'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)  # Template name/identifier
+    message = db.Column(db.Text, nullable=False)  # The actual message content
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    creator = db.relationship('User', backref='whatsapp_templates')
+
+class CustomerNameCounter(db.Model):
+    """
+    Global counter for generating default customer names.
+    Stores a single row with the current counter value.
+    Ensures unique sequential customer names across all users and sessions.
+    """
+    __tablename__ = 'customer_name_counter'
+
+    id = db.Column(db.Integer, primary_key=True)
+    counter = db.Column(db.Integer, nullable=False, default=0)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+
+class TeleobiTemplateCache(db.Model):
+    """
+    Cache for Teleobi WhatsApp templates to avoid frequent API calls.
+    Stores template metadata including type (Utility/Marketing) and status.
+    """
+    __tablename__ = 'teleobi_template_cache'
+
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.String(100), nullable=False, unique=True)  # WhatsApp template ID
+    teleobi_template_id = db.Column(db.String(50), nullable=True)  # Teleobi internal template ID (for sending)
+    template_name = db.Column(db.String(200), nullable=False)
+    template_type = db.Column(db.String(20), nullable=False)  # 'utility' or 'marketing'
+    status = db.Column(db.String(50), nullable=False)  # 'Approved', 'Pending', 'Rejected'
+    category = db.Column(db.String(50), nullable=True)  # 'transactional', 'marketing', etc.
+    language = db.Column(db.String(10), default='en_US')
+    variables = db.Column(db.JSON, nullable=True)  # Template variable structure
+    template_json = db.Column(db.Text, nullable=True)  # Full template JSON
+    whatsapp_business_id = db.Column(db.Integer, nullable=True)  # WhatsApp Business ID (per template, for message status API)
+    phone_number_id = db.Column(db.String(100), nullable=False)
+    synced_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+
+    __table_args__ = (
+        db.Index('idx_template_type', 'template_type'),
+        db.Index('idx_template_status', 'status'),
+        db.Index('idx_template_synced', 'synced_at'),
+    )
+
+class WhatsAppSend(db.Model):
+    """
+    Track all WhatsApp template messages sent via Teleobi API.
+    Used for monitoring, quality tracking, and delivery status.
+    """
+    __tablename__ = 'whatsapp_send'
+
+    id = db.Column(db.Integer, primary_key=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=True)
+    phone_number = db.Column(db.String(20), nullable=False)
+    template_id = db.Column(db.String(100), nullable=True)
+    template_name = db.Column(db.String(200), nullable=False)
+    template_type = db.Column(db.String(20), nullable=True)  # 'utility' or 'marketing'
+    variables = db.Column(db.JSON, nullable=True)  # Template variables used
+    wa_message_id = db.Column(db.String(200), nullable=True)  # WhatsApp message ID from API
+    status = db.Column(db.String(50), nullable=False, default='pending')  # 'pending', 'sent', 'delivered', 'read', 'failed'
+    sent_at = db.Column(db.DateTime, nullable=True)
+    delivered_at = db.Column(db.DateTime, nullable=True)
+    read_at = db.Column(db.DateTime, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    retry_count = db.Column(db.Integer, default=0)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+
+    # Relationships
+    lead = db.relationship('Lead', backref='whatsapp_sends')
+    creator = db.relationship('User', backref='whatsapp_sends')
+
+    __table_args__ = (
+        db.Index('idx_whatsapp_send_status', 'status'),
+        db.Index('idx_whatsapp_send_phone', 'phone_number'),
+        db.Index('idx_whatsapp_send_template', 'template_name'),
+        db.Index('idx_whatsapp_send_created', 'created_at'),
+        db.Index('idx_whatsapp_send_wa_id', 'wa_message_id'),
+    )
+
+class WhatsAppBulkJob(db.Model):
+    """
+    Track bulk messaging jobs for monitoring and management.
+    """
+    __tablename__ = 'whatsapp_bulk_job'
+
+    id = db.Column(db.Integer, primary_key=True)
+    job_name = db.Column(db.String(200), nullable=True)
+    template_name = db.Column(db.String(200), nullable=False)
+    template_type = db.Column(db.String(20), nullable=True)  # Store template type for recovery
+    total_recipients = db.Column(db.Integer, nullable=False, default=0)
+    processed_count = db.Column(db.Integer, default=0)  # Messages processed so far
+    sent_count = db.Column(db.Integer, default=0)
+    delivered_count = db.Column(db.Integer, default=0)
+    read_count = db.Column(db.Integer, default=0)  # Messages read/opened
+    failed_count = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(50), nullable=False, default='pending')  # 'pending', 'processing', 'completed', 'failed', 'cancelled'
+    filter_criteria = db.Column(db.JSON, nullable=True)  # Store filter criteria used
+    recipients = db.Column(db.JSON, nullable=True)  # Store recipients list for job recovery
+    variables = db.Column(db.JSON, nullable=True)  # Store template variables for job recovery
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
+
+    creator = db.relationship('User', backref='whatsapp_bulk_jobs')
+
+    __table_args__ = (
+        db.Index('idx_bulk_job_status', 'status'),
+        db.Index('idx_bulk_job_created', 'created_at'),
+    )
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
 
-# ============================================================================
-# AUTHENTICATION ROUTES - Now in routes/auth.py (registered as blueprint)
-# ============================================================================
-# Login and logout routes have been moved to routes/auth.py
-# They are automatically registered via the auth_bp blueprint
+@application.route('/login', methods=['GET', 'POST', 'OPTIONS'])
+@limiter.limit("20 per minute", methods=['POST'])  # Only rate limit POST requests, not GET
+def login():
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
+        return response
+
+    # For GET requests, always serve Next.js frontend
+    if request.method == 'GET':
+        return serve_frontend()
+
+    # For POST requests, handle as API login
+    try:
+        if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
+            return jsonify({'success': True, 'message': 'Already logged in', 'user': {'id': current_user.id, 'username': current_user.username, 'name': current_user.name, 'is_admin': current_user.is_admin}})
+    except Exception:
+        pass  # User not authenticated, continue with login
+
+    if request.method == 'POST':
+        # Handle both JSON and form-urlencoded requests
+        if request.is_json:
+            data = request.get_json()
+            username = data.get('username', '')
+            password = data.get('password', '')
+        else:
+            username = request.form.get('username', '')
+            password = request.form.get('password', '')
+
+        if not username or not password:
+            return jsonify({'success': False, 'message': 'Username and password are required'}), 400
+
+        try:
+            # Query user from database
+            print(f"Attempting to query user: {username}")
+            user = User.query.filter_by(username=username).first()
+            print(f"User found: {user is not None}")
+
+            if not user:
+                print(f"User '{username}' not found in database")
+                return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
+
+            # Check password
+            password_valid = user.check_password(password)
+            print(f"Password valid: {password_valid}")
+
+            if not password_valid:
+                print(f"Invalid password for user '{username}'")
+                return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
+
+            # Login user
+            login_user(user, remember=True)
+            print(f"User '{username}' logged in successfully")
+
+            # Commit session if needed
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': 'Login successful',
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'name': user.name,
+                    'is_admin': user.is_admin
+                }
+            })
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Login error: {str(e)}")
+            print(f"Traceback: {error_trace}")
+            db.session.rollback()
+            # Return more detailed error in development, generic in production
+            if application.debug:
+                error_msg = f'An error occurred during login: {str(e)}'
+            else:
+                error_msg = 'An error occurred during login. Please try again.'
+            return jsonify({'success': False, 'message': error_msg}), 500
+
+    # Default: serve Next.js frontend
+    return serve_frontend()
 
 @application.after_request
 def after_request(response):
     """Add CORS headers to all responses (fallback for development only)"""
     # Flask-CORS should handle CORS in production, but we keep this for development
-    IS_PRODUCTION = os.getenv('FLASK_ENV') == 'production' or os.getenv('EB_ENVIRONMENT') is not None
     if not IS_PRODUCTION:
         origin = request.headers.get('Origin', '')
         # Allow requests from frontend development servers
@@ -187,7 +795,15 @@ def call_stats():
             'error': str(e)
         }), 500
 
-# Logout route moved to routes/auth.py
+@application.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    # Support both HTML redirect and JSON response
+    accept_header = request.headers.get('Accept', '')
+    if 'application/json' in accept_header:
+        return jsonify({'success': True, 'message': 'Logged out successfully'})
+    return redirect(url_for('login'))
 
 @application.route('/health')
 def health_check():
@@ -302,7 +918,20 @@ def index():
     # The frontend will handle authentication via ProtectedRoute component
     return serve_frontend()
 
-# Utility functions moved to utils.py - imported above
+def utc_to_ist(utc_dt):
+    if utc_dt is None:
+        return None
+    if utc_dt.tzinfo is None:
+        utc_dt = pytz.UTC.localize(utc_dt)
+    ist_tz = pytz.timezone('Asia/Kolkata')
+    return utc_dt.astimezone(ist_tz)
+
+def to_ist_iso(dt):
+    """Convert datetime to IST ISO string for API responses"""
+    if dt is None:
+        return None
+    ist_dt = utc_to_ist(dt)
+    return ist_dt.isoformat() if ist_dt else None
 
 def get_initial_followup_count(user_id, date):
     daily_count = DailyFollowupCount.query.filter_by(
@@ -2079,7 +2708,47 @@ def api_delete_followup(lead_id):
         traceback.print_exc()
         return jsonify({'error': str(e), 'message': 'Error deleting lead'}), 500
 
-# /api/user/current route moved to routes/auth.py (registered as blueprint)
+@application.route('/api/user/current', methods=['GET', 'OPTIONS'])
+def api_user_current():
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        response = make_response()
+        origin = request.headers.get('Origin', 'http://gaadimech-crm-unified.eba-ftgmu9fp.ap-south-1.elasticbeanstalk.com')
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin')
+        return response
+
+    # Debug logging
+    print(f"[DEBUG] /api/user/current called from origin: {request.headers.get('Origin')}")
+    print(f"[DEBUG] Request method: {request.method}")
+    print(f"[DEBUG] Has session cookie: {request.cookies.get('session') is not None}")
+
+    """Get current user info for admin check"""
+    try:
+        # Check if user is authenticated without redirecting
+        # Handle case where database connection might fail
+        try:
+            if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
+                return jsonify({'error': 'Not authenticated'}), 401
+
+            return jsonify({
+                'id': current_user.id,
+                'username': current_user.username,
+                'name': current_user.name,
+                'is_admin': current_user.is_admin
+            })
+        except Exception as db_error:
+            # If database connection fails, return 503 (Service Unavailable) instead of 401
+            # This prevents redirect loops when DB is down
+            print(f"Database error in api_user_current: {db_error}")
+            return jsonify({'error': 'Database connection failed', 'message': 'Service temporarily unavailable'}), 503
+    except Exception as e:
+        print(f"Error in api_user_current: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 # WhatsApp Template API endpoints
 @application.route('/api/whatsapp-templates', methods=['GET', 'OPTIONS'])
@@ -4604,10 +5273,78 @@ def serve_next_static(path):
         return jsonify({'error': 'Error serving static file'}), 500
 
 
-# serve_frontend moved to routes/common.py
-from routes.common import serve_frontend
+def serve_frontend():
+    """Serve the Next.js index.html for client-side routing"""
+    try:
+        frontend_path = os.path.join(os.path.dirname(__file__), 'static', 'frontend')
+        index_path = os.path.join(frontend_path, 'index.html')
 
-# Database initialization moved to services/database.py - imported above
+        if os.path.exists(index_path):
+            return send_file(index_path)
+        else:
+            # Fallback to old template if Next.js build doesn't exist
+            return render_template('error.html', error="Frontend not built. Please build the Next.js application."), 404
+    except Exception as e:
+        print(f"Error serving frontend: {e}")
+        return render_template('error.html', error="Error loading frontend application."), 500
+
+# Database initialization function
+def init_database():
+    """Initialize database with tables and default users"""
+    try:
+        with application.app_context():
+            # Create all tables
+            db.create_all()
+
+            # Check if admin user exists, if not create it
+            # If exists, ensure is_admin is True (fix for existing admin users)
+            admin_user = User.query.filter_by(username='admin').first()
+            if not admin_user:
+                admin_user = User(
+                    username='admin',
+                    name='Administrator',
+                    is_admin=True
+                )
+                admin_user.set_password('admin@796!')  # Use set_password to hash it properly
+                db.session.add(admin_user)
+            else:
+                # Ensure existing admin user has is_admin=True
+                if not admin_user.is_admin:
+                    print(f"⚠️  Admin user found but is_admin was False. Fixing...")
+                    admin_user.is_admin = True
+                    db.session.commit()
+                    print(f"✅ Admin user is_admin field updated to True")
+
+            # Create default users if they don't exist
+            default_users = [
+                {'username': 'hemlata', 'name': 'Hemlata', 'password': 'hemlata123'},
+                {'username': 'sneha', 'name': 'Sneha', 'password': 'sneha123'}
+            ]
+
+            for user_data in default_users:
+                existing_user = User.query.filter_by(username=user_data['username']).first()
+                if not existing_user:
+                    new_user = User(
+                        username=user_data['username'],
+                        name=user_data['name'],
+                        is_admin=False
+                    )
+                    new_user.set_password(user_data['password'])  # Use set_password to hash it properly
+                    db.session.add(new_user)
+
+            # Initialize customer name counter if it doesn't exist
+            counter = CustomerNameCounter.query.first()
+            if not counter:
+                counter = CustomerNameCounter(counter=0)
+                db.session.add(counter)
+                print("✅ Customer name counter initialized")
+
+            db.session.commit()
+            print("Database initialized successfully")
+
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+        db.session.rollback()
 
 # ==================== PUSH NOTIFICATION FUNCTIONS ====================
 
