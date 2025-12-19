@@ -6379,13 +6379,18 @@ def recover_incomplete_jobs():
                         reason = "no start time recorded"
                     
                     if should_resume:
-                        print(f"🔄 Resuming job {job.id} ({reason}, processed {job.processed_count}/{job.total_recipients})")
-                        thread = threading.Thread(
-                            target=process_bulk_whatsapp_job,
-                            args=(job.id,),
-                            daemon=False
-                        )
-                        thread.start()
+                        # Double-check status is still processing (in case it was cancelled)
+                        db.session.refresh(job)
+                        if job.status != 'processing':
+                            print(f"ℹ️  Job {job.id} status changed to '{job.status}', skipping recovery")
+                        else:
+                            print(f"🔄 Resuming job {job.id} ({reason}, processed {job.processed_count}/{job.total_recipients})")
+                            thread = threading.Thread(
+                                target=process_bulk_whatsapp_job,
+                                args=(job.id,),
+                                daemon=False
+                            )
+                            thread.start()
             else:
                 print("✅ No incomplete jobs found")
     except Exception as e:
@@ -6413,22 +6418,28 @@ def api_get_bulk_job_status(job_id):
             return jsonify({'error': 'Permission denied'}), 403
 
         # Auto-recover stuck jobs (if job is processing but hasn't updated in 2+ minutes)
+        # IMPORTANT: Only recover jobs with status 'processing', never 'cancelled' jobs
         if job.status == 'processing' and job.processed_count < job.total_recipients:
-            time_since_update = None
-            if job.updated_at:
-                time_since_update = (datetime.now(ist) - job.updated_at).total_seconds()
-            elif job.started_at:
-                time_since_update = (datetime.now(ist) - job.started_at).total_seconds()
-            
-            if time_since_update and time_since_update > 120:  # 2 minutes without update
-                print(f"🔄 Auto-recovering stuck job {job_id} (no update for {time_since_update:.0f}s)")
-                import threading
-                thread = threading.Thread(
-                    target=process_bulk_whatsapp_job,
-                    args=(job_id,),
-                    daemon=False
-                )
-                thread.start()
+            # Double-check status is still processing (in case it was cancelled between query and now)
+            db.session.refresh(job)
+            if job.status != 'processing':
+                print(f"ℹ️  Job {job_id} status changed to '{job.status}', skipping auto-recovery")
+            else:
+                time_since_update = None
+                if job.updated_at:
+                    time_since_update = (datetime.now(ist) - job.updated_at).total_seconds()
+                elif job.started_at:
+                    time_since_update = (datetime.now(ist) - job.started_at).total_seconds()
+                
+                if time_since_update and time_since_update > 120:  # 2 minutes without update
+                    print(f"🔄 Auto-recovering stuck job {job_id} (no update for {time_since_update:.0f}s)")
+                    import threading
+                    thread = threading.Thread(
+                        target=process_bulk_whatsapp_job,
+                        args=(job_id,),
+                        daemon=False
+                    )
+                    thread.start()
 
         # Get progress from job itself (real-time during processing)
         # Use processed_count from job for accurate progress
@@ -6604,16 +6615,25 @@ def api_recover_bulk_job(job_id):
             return jsonify({'error': 'Permission denied'}), 403
 
         # Only allow recovery of processing jobs that are incomplete
+        # IMPORTANT: Never recover cancelled jobs
         if job.status not in ['processing', 'pending']:
             return jsonify({
                 'error': f'Cannot recover job with status: {job.status}',
-                'message': 'Only processing or pending jobs can be recovered'
+                'message': 'Only processing or pending jobs can be recovered. Cancelled jobs cannot be recovered.'
             }), 400
 
         if job.processed_count >= job.total_recipients:
             return jsonify({
                 'error': 'Job is already complete',
                 'message': f'Job has processed {job.processed_count}/{job.total_recipients} recipients'
+            }), 400
+
+        # Double-check status is still processing/pending (in case it was cancelled)
+        db.session.refresh(job)
+        if job.status not in ['processing', 'pending']:
+            return jsonify({
+                'error': f'Job status changed to: {job.status}',
+                'message': 'Cannot recover job that is not in processing or pending status'
             }), 400
 
         # Trigger recovery
