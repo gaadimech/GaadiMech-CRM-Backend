@@ -33,3 +33,4 @@ def downgrade():
     op.drop_column('whatsapp_bulk_job', 'recipients')
 
 
+

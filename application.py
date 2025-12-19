@@ -6359,23 +6359,27 @@ def recover_incomplete_jobs():
             ).all()
 
             if incomplete_jobs:
-                print(f"🔄 Found {len(incomplete_jobs)} incomplete job(s), resuming...")
+                print(f"🔄 Found {len(incomplete_jobs)} incomplete job(s), checking if they need recovery...")
                 import threading
                 for job in incomplete_jobs:
-                    # Check if job is old enough to be considered stuck (more than 5 minutes)
+                    should_resume = False
+                    reason = ""
+                    
                     if job.started_at:
                         time_since_start = (datetime.now(ist) - job.started_at).total_seconds()
-                        if time_since_start > 300:  # 5 minutes
-                            print(f"🔄 Resuming job {job.id} (stuck for {time_since_start:.0f}s, processed {job.processed_count}/{job.total_recipients})")
-                            thread = threading.Thread(
-                                target=process_bulk_whatsapp_job,
-                                args=(job.id,),
-                                daemon=False
-                            )
-                            thread.start()
+                        time_since_update = (datetime.now(ist) - (job.updated_at or job.started_at)).total_seconds()
+                        
+                        # Resume if job is stuck (no update in last 2 minutes) or very old (5+ minutes)
+                        if time_since_update > 120 or time_since_start > 300:  # 2 minutes or 5 minutes
+                            should_resume = True
+                            reason = f"stuck for {time_since_update:.0f}s (started {time_since_start:.0f}s ago)"
                     else:
                         # Job started but no start time recorded, resume it
-                        print(f"🔄 Resuming job {job.id} (no start time recorded)")
+                        should_resume = True
+                        reason = "no start time recorded"
+                    
+                    if should_resume:
+                        print(f"🔄 Resuming job {job.id} ({reason}, processed {job.processed_count}/{job.total_recipients})")
                         thread = threading.Thread(
                             target=process_bulk_whatsapp_job,
                             args=(job.id,),
@@ -6408,39 +6412,70 @@ def api_get_bulk_job_status(job_id):
         if not current_user.is_admin and job.created_by != current_user.id:
             return jsonify({'error': 'Permission denied'}), 403
 
-        # Get detailed statistics from send records
-        send_records = WhatsAppSend.query.filter(
-            WhatsAppSend.template_name == job.template_name,
-            WhatsAppSend.created_at >= job.created_at,
-            WhatsAppSend.created_at < (job.created_at + timedelta(hours=24))  # Within 24 hours of job creation
-        ).all()
-
-        # Further filter by checking if variables contain job ID (if stored)
-        filtered_records = []
-        for record in send_records:
-            if record.variables:
-                try:
-                    vars_dict = json.loads(record.variables) if isinstance(record.variables, str) else record.variables
-                    if vars_dict.get('_bulk_job_id') == job.id:
-                        filtered_records.append(record)
-                    elif not vars_dict.get('_bulk_job_id'):
-                        filtered_records.append(record)
-                except:
-                    filtered_records.append(record)
-            else:
-                filtered_records.append(record)
-
-        send_records = filtered_records
+        # Auto-recover stuck jobs (if job is processing but hasn't updated in 2+ minutes)
+        if job.status == 'processing' and job.processed_count < job.total_recipients:
+            time_since_update = None
+            if job.updated_at:
+                time_since_update = (datetime.now(ist) - job.updated_at).total_seconds()
+            elif job.started_at:
+                time_since_update = (datetime.now(ist) - job.started_at).total_seconds()
+            
+            if time_since_update and time_since_update > 120:  # 2 minutes without update
+                print(f"🔄 Auto-recovering stuck job {job_id} (no update for {time_since_update:.0f}s)")
+                import threading
+                thread = threading.Thread(
+                    target=process_bulk_whatsapp_job,
+                    args=(job_id,),
+                    daemon=False
+                )
+                thread.start()
 
         # Get progress from job itself (real-time during processing)
         # Use processed_count from job for accurate progress
         processed_count = job.processed_count or 0
 
-        # Calculate actual counts from send records
-        actual_sent = len([s for s in send_records if s.status in ['sent', 'delivered', 'read']])
-        delivered_count = len([s for s in send_records if s.status in ['delivered', 'read']])
-        read_count = len([s for s in send_records if s.status == 'read'])
-        failed_count = len([s for s in send_records if s.status == 'failed'])
+        # Use job's stored counts for performance (updated during processing)
+        # Only query send records if job is completed and we need detailed stats
+        if job.status in ['completed', 'partial', 'failed']:
+            # For completed jobs, query send records for detailed stats
+            # Use a more efficient query with JSON filtering if possible
+            try:
+                # Try to use job ID from variables JSON (if database supports JSON queries)
+                # Fallback to simpler query for better performance
+                send_records = WhatsAppSend.query.filter(
+                    WhatsAppSend.template_name == job.template_name,
+                    WhatsAppSend.created_at >= job.created_at,
+                    WhatsAppSend.created_at < (job.created_at + timedelta(hours=24))
+                ).limit(1000).all()  # Limit to prevent huge queries
+                
+                # Filter by job ID in variables (only check first 1000 records for performance)
+                filtered_records = []
+                for record in send_records[:1000]:  # Limit processing
+                    if record.variables:
+                        try:
+                            vars_dict = json.loads(record.variables) if isinstance(record.variables, str) else record.variables
+                            if vars_dict.get('_bulk_job_id') == job.id:
+                                filtered_records.append(record)
+                        except:
+                            pass
+                
+                actual_sent = len([s for s in filtered_records if s.status in ['sent', 'delivered', 'read']])
+                delivered_count = len([s for s in filtered_records if s.status in ['delivered', 'read']])
+                read_count = len([s for s in filtered_records if s.status == 'read'])
+                failed_count = len([s for s in filtered_records if s.status == 'failed'])
+            except Exception as e:
+                print(f"⚠️  Error querying send records for job {job_id}: {e}")
+                # Fallback to job's stored counts
+                actual_sent = job.sent_count or 0
+                delivered_count = job.delivered_count or 0
+                read_count = job.read_count or 0
+                failed_count = job.failed_count or 0
+        else:
+            # For processing jobs, use job's stored counts (updated in real-time)
+            actual_sent = job.sent_count or 0
+            delivered_count = job.delivered_count or 0
+            read_count = job.read_count or 0
+            failed_count = job.failed_count or 0
 
         # Calculate progress percentage
         progress_percentage = (processed_count / job.total_recipients * 100) if job.total_recipients > 0 else 0
@@ -6545,6 +6580,68 @@ def api_cancel_bulk_job(job_id):
 
     except Exception as e:
         print(f"Error cancelling job: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/whatsapp/teleobi/jobs/<int:job_id>/recover', methods=['POST', 'OPTIONS'])
+@login_required
+def api_recover_bulk_job(job_id):
+    """Manually trigger recovery for a stuck bulk send job"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        job = WhatsAppBulkJob.query.get_or_404(job_id)
+
+        # Check permissions
+        if not current_user.is_admin and job.created_by != current_user.id:
+            return jsonify({'error': 'Permission denied'}), 403
+
+        # Only allow recovery of processing jobs that are incomplete
+        if job.status not in ['processing', 'pending']:
+            return jsonify({
+                'error': f'Cannot recover job with status: {job.status}',
+                'message': 'Only processing or pending jobs can be recovered'
+            }), 400
+
+        if job.processed_count >= job.total_recipients:
+            return jsonify({
+                'error': 'Job is already complete',
+                'message': f'Job has processed {job.processed_count}/{job.total_recipients} recipients'
+            }), 400
+
+        # Trigger recovery
+        print(f"🔄 Manually recovering job {job_id} (processed {job.processed_count}/{job.total_recipients})")
+        import threading
+        thread = threading.Thread(
+            target=process_bulk_whatsapp_job,
+            args=(job_id,),
+            daemon=False
+        )
+        thread.start()
+
+        response = jsonify({
+            'success': True,
+            'message': 'Job recovery triggered successfully',
+            'job': {
+                'id': job.id,
+                'status': job.status,
+                'processed_count': job.processed_count,
+                'total_recipients': job.total_recipients
+            }
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    except Exception as e:
+        print(f"Error recovering job: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
