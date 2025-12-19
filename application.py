@@ -532,16 +532,33 @@ def record_worked_lead(lead_id, user_id, old_followup_date, new_followup_date):
     """
     Record when a lead has been worked upon by changing its followup date.
     This is used to track completion rates and user performance.
+    
+    The work_date is set to the date of old_followup_date (the date the lead was originally scheduled for),
+    not the current date. This ensures that when querying for a specific date's worked leads,
+    we get all leads that were originally scheduled for that date and have been worked on.
     """
     try:
-        # Get today's date in IST
-        today = datetime.now(ist).date()
+        # If old_followup_date is None, we can't determine which date this work belongs to
+        if old_followup_date is None:
+            print(f"Warning: Cannot record worked lead {lead_id} - old_followup_date is None")
+            return
 
-        # Check if we already have a record for this lead on this day
+        # Get the date of the old_followup_date (the date the lead was originally scheduled for)
+        # Convert to IST to get the correct date
+        if old_followup_date.tzinfo is None:
+            # Assume UTC if timezone-naive
+            old_followup_date_utc = pytz.UTC.localize(old_followup_date)
+        else:
+            old_followup_date_utc = old_followup_date.astimezone(pytz.UTC)
+        
+        old_followup_date_ist = old_followup_date_utc.astimezone(ist)
+        work_date = old_followup_date_ist.date()
+
+        # Check if we already have a record for this lead for this original followup date
         existing_record = WorkedLead.query.filter_by(
             lead_id=lead_id,
             user_id=user_id,
-            work_date=today
+            work_date=work_date
         ).first()
 
         if not existing_record:
@@ -549,23 +566,25 @@ def record_worked_lead(lead_id, user_id, old_followup_date, new_followup_date):
             worked_lead = WorkedLead(
                 lead_id=lead_id,
                 user_id=user_id,
-                work_date=today,
+                work_date=work_date,
                 old_followup_date=old_followup_date,
                 new_followup_date=new_followup_date,
                 worked_at=datetime.now(ist)
             )
             db.session.add(worked_lead)
             db.session.commit()
-            print(f"Recorded worked lead: Lead {lead_id} by User {user_id} on {today}")
+            print(f"Recorded worked lead: Lead {lead_id} by User {user_id} for date {work_date}")
         else:
             # Update existing record with new followup date
             existing_record.new_followup_date = new_followup_date
             existing_record.worked_at = datetime.now(ist)
             db.session.commit()
-            print(f"Updated worked lead: Lead {lead_id} by User {user_id} on {today}")
+            print(f"Updated worked lead: Lead {lead_id} by User {user_id} for date {work_date}")
 
     except Exception as e:
         print(f"Error recording worked lead: {e}")
+        import traceback
+        traceback.print_exc()
         db.session.rollback()
 
 def get_worked_leads_for_date(user_id, date):
@@ -573,6 +592,9 @@ def get_worked_leads_for_date(user_id, date):
     Get the count of worked leads for a specific user on a specific date.
     Only counts leads that were part of the initial assignment (old_followup_date was on target date).
     This ensures completion rate is calculated correctly: worked leads / initial assignment.
+    
+    Since work_date is now set to the date of old_followup_date (the original scheduled date),
+    we can simply query by work_date. We still verify old_followup_date to ensure data integrity.
     """
     try:
         # Create IST datetime range for the target date
@@ -582,9 +604,9 @@ def get_worked_leads_for_date(user_id, date):
         date_start_utc = date_start_ist.astimezone(pytz.UTC)
         date_end_utc = date_end_ist.astimezone(pytz.UTC)
 
-        # Count only worked leads where:
-        # 1. The work was done on the target date (work_date = date)
-        # 2. The lead's old_followup_date was on the target date (was part of initial assignment)
+        # Count worked leads where:
+        # 1. work_date == date (the date the lead was originally scheduled for, now set correctly in record_worked_lead)
+        # 2. old_followup_date was on the target date (verify it was part of initial assignment)
         # 3. old_followup_date is not None (exclude leads that didn't have a followup date before)
         worked_count = WorkedLead.query.filter(
             WorkedLead.user_id == user_id,
@@ -2008,6 +2030,10 @@ def api_update_followup(lead_id):
             lead.status = data['status']
         if 'remarks' in data:
             lead.remarks = data['remarks']
+        # Store old followup date before any updates
+        old_followup_date = lead.followup_date
+        followup_date_changed = False
+        
         if 'followup_date' in data and data['followup_date']:
             # Parse date string - frontend now sends YYYY-MM-DD format to avoid timezone issues
             try:
@@ -2023,8 +2049,10 @@ def api_update_followup(lead_id):
                 followup_start = ist.localize(datetime.combine(followup_date_only, datetime.min.time()))
                 new_followup_date = followup_start.astimezone(pytz.UTC)
 
-                # Always update to ensure the date is exactly as the user selected
-                lead.followup_date = new_followup_date
+                # Check if followup date actually changed
+                if old_followup_date != new_followup_date:
+                    followup_date_changed = True
+                    lead.followup_date = new_followup_date
             except (ValueError, AttributeError) as e:
                 print(f"Error parsing followup_date: {e}")
                 # If parsing fails, don't update the date to avoid breaking existing data
@@ -2032,6 +2060,10 @@ def api_update_followup(lead_id):
 
         lead.modified_at = datetime.now(ist)
         db.session.commit()
+        
+        # Record that this lead has been worked upon if followup date changed
+        if followup_date_changed:
+            record_worked_lead(lead_id, current_user.id, old_followup_date, lead.followup_date)
 
         return jsonify({
             'success': True,
@@ -3439,10 +3471,29 @@ def admin_leads():
     try:
         # Check if user is admin
         if not current_user.is_admin:
+            # Check if this is an API request from Next.js frontend
+            is_api_request = (
+                request.headers.get('Accept', '').startswith('application/json') or
+                request.headers.get('Content-Type', '').startswith('application/json') or
+                request.headers.get('Origin', '').endswith('.gaadimech.com') or
+                'crm.gaadimech.com' in request.headers.get('Referer', '') or
+                'localhost:3000' in request.headers.get('Origin', '')
+            )
+            if is_api_request:
+                return jsonify({'success': False, 'error': 'Access denied. Admin privileges required.'}), 403
             flash('Access denied. Admin privileges required.', 'error')
             return redirect(url_for('index'))
 
         if request.method == 'POST':
+            # Check if this is an API request from Next.js frontend
+            is_api_request = (
+                request.headers.get('Accept', '').startswith('application/json') or
+                request.headers.get('Content-Type', '').startswith('application/json') or
+                request.headers.get('Origin', '').endswith('.gaadimech.com') or
+                'crm.gaadimech.com' in request.headers.get('Referer', '') or
+                'localhost:3000' in request.headers.get('Origin', '')
+            )
+            
             # Handle form submission to add new unassigned lead
             mobile = request.form.get('mobile')
             customer_name = request.form.get('customer_name')
@@ -3476,17 +3527,23 @@ def admin_leads():
 
             # Validate required fields
             if not mobile:
+                if is_api_request:
+                    return jsonify({'success': False, 'error': 'Mobile number is required'}), 400
                 flash('Mobile number is required', 'error')
                 return redirect(url_for('admin_leads'))
 
             # Normalize mobile number
             normalized_mobile = normalize_mobile_number(mobile)
             if not normalized_mobile:
+                if is_api_request:
+                    return jsonify({'success': False, 'error': 'Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111'}), 400
                 flash('Invalid mobile number format. Please use: +917404625111, 7404625111, or 917404625111', 'error')
                 return redirect(url_for('admin_leads'))
             mobile = normalized_mobile
 
             if not assign_to:
+                if is_api_request:
+                    return jsonify({'success': False, 'error': 'Please select a team member to assign this lead'}), 400
                 flash('Please select a team member to assign this lead', 'error')
                 return redirect(url_for('admin_leads'))
 
@@ -3542,12 +3599,26 @@ def admin_leads():
                     import traceback
                     traceback.print_exc()
 
+                # Return JSON for API requests, redirect for template requests
+                if is_api_request:
+                    return jsonify({
+                        'success': True,
+                        'message': 'Lead added and assigned successfully!',
+                        'lead_id': new_unassigned_lead.id,
+                        'assignment_id': new_assignment.id
+                    }), 200
+                
                 flash('Lead added and assigned successfully!', 'success')
                 return redirect(url_for('admin_leads'))
 
             except Exception as e:
                 db.session.rollback()
-                print(f"Error adding unassigned lead: {str(e)}")
+                error_msg = f'Error adding unassigned lead: {str(e)}'
+                print(error_msg)
+                import traceback
+                traceback.print_exc()
+                if is_api_request:
+                    return jsonify({'success': False, 'error': 'Error adding lead. Please try again.'}), 500
                 flash('Error adding lead. Please try again.', 'error')
                 return redirect(url_for('admin_leads'))
 

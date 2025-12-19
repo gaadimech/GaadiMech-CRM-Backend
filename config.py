@@ -107,8 +107,10 @@ application.config.update(
     SESSION_COOKIE_DOMAIN=None,
     REMEMBER_COOKIE_SECURE=False,
     REMEMBER_COOKIE_HTTPONLY=True,
-    REMEMBER_COOKIE_DURATION=timedelta(hours=24),
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=24)
+    # Extended session duration: 30 days for remember cookie and permanent sessions
+    # Users will stay logged in for 30 days unless they explicitly log out
+    REMEMBER_COOKIE_DURATION=timedelta(days=3),
+    PERMANENT_SESSION_LIFETIME=timedelta(days=3)
 )
 
 # Initialize extensions

@@ -2,7 +2,7 @@
 Authentication routes.
 Handles login, logout, and user session management.
 """
-from flask import Blueprint, request, jsonify, make_response, redirect, url_for, current_app
+from flask import Blueprint, request, jsonify, make_response, redirect, url_for, current_app, session
 from flask_login import login_user, logout_user, login_required, current_user
 from config import db, limiter
 from models import User
@@ -65,6 +65,11 @@ def login():
             if not user.check_password(password):
                 return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
 
+            # Make session permanent so it respects PERMANENT_SESSION_LIFETIME (30 days)
+            # This ensures users stay logged in for extended periods
+            session.permanent = True
+            
+            # Login user with remember=True for long-term authentication
             login_user(user, remember=True)
             db.session.commit()
 
