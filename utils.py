@@ -21,10 +21,13 @@ def normalize_mobile_number(mobile):
     """
     Normalize mobile number to accept three formats:
     1. +91XXXXXXXXXX (13 characters: +91 + 10 digits)
-    2. XXXXXXXXXX (10 digits)
+    2. XXXXXXXXXX (10 digits) - including edge case where 10-digit number starts with 91
     3. 91XXXXXXXXXX (12 digits: 91 + 10 digits)
 
     Returns normalized mobile number (10 digits) or None if invalid.
+    
+    Edge case handling: A 10-digit number starting with 91 (e.g., 9123456789) 
+    is treated as a valid 10-digit number, not as 91 prefix + 8 digits.
     """
     if not mobile:
         return None
@@ -32,18 +35,22 @@ def normalize_mobile_number(mobile):
     # Remove all non-digit characters except +
     cleaned = re.sub(r'[^\d+]', '', str(mobile))
 
-    # Handle +91 format
-    if cleaned.startswith('+91'):
+    # Handle +91 format (must be exactly 13 characters: +91 + 10 digits)
+    if cleaned.startswith('+91') and len(cleaned) == 13:
         digits = cleaned[3:]
-        if len(digits) == 10:
+        if len(digits) == 10 and digits.isdigit():
             return digits
-    # Handle 91XXXXXXXXXX format
-    elif cleaned.startswith('91'):
+    
+    # Handle 91XXXXXXXXXX format (must be exactly 12 characters: 91 + 10 digits)
+    # This check comes after length check to avoid matching 10-digit numbers starting with 91
+    if cleaned.startswith('91') and len(cleaned) == 12:
         digits = cleaned[2:]
-        if len(digits) == 10:
+        if len(digits) == 10 and digits.isdigit():
             return digits
-    # Handle XXXXXXXXXX format (10 digits)
-    elif len(cleaned) == 10:
+    
+    # Handle XXXXXXXXXX format (exactly 10 digits)
+    # This handles the edge case where a 10-digit number starts with 91
+    if len(cleaned) == 10 and cleaned.isdigit():
         return cleaned
 
     return None

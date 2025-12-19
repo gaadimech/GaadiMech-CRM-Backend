@@ -4480,7 +4480,11 @@ def calculate_lead_score(lead):
 
     # Recency score (recently modified = active)
     if lead.modified_at:
-        days_since_modified = (datetime.now(ist) - lead.modified_at).days
+        now = datetime.now(tz=ist)
+        modified_at = lead.modified_at
+        if modified_at.tzinfo is None:
+            modified_at = ist.localize(modified_at)
+        days_since_modified = (now - modified_at).days
         if days_since_modified < 1:
             score += 15
         elif days_since_modified < 3:
@@ -5610,7 +5614,11 @@ def process_bulk_whatsapp_job(job_id: int):
 
                     # Log progress every 10 messages or at the end
                     if processed_count % 10 == 0 or processed_count == total_recipients:
-                        elapsed = (datetime.now(ist) - start_time).total_seconds()
+                        now = datetime.now(tz=ist)
+                        start = start_time
+                        if start.tzinfo is None:
+                            start = ist.localize(start)
+                        elapsed = (now - start).total_seconds()
                         rate = processed_count / elapsed if elapsed > 0 else 0
                         remaining = total_recipients - processed_count
                         eta_seconds = remaining / rate if rate > 0 else 0
@@ -5700,8 +5708,16 @@ def recover_incomplete_jobs():
                     reason = ""
                     
                     if job.started_at:
-                        time_since_start = (datetime.now(ist) - job.started_at).total_seconds()
-                        time_since_update = (datetime.now(ist) - (job.updated_at or job.started_at)).total_seconds()
+                        now = datetime.now(tz=ist)
+                        started_at = job.started_at
+                        if started_at.tzinfo is None:
+                            started_at = ist.localize(started_at)
+                        time_since_start = (now - started_at).total_seconds()
+                        
+                        updated_at = job.updated_at or job.started_at
+                        if updated_at.tzinfo is None:
+                            updated_at = ist.localize(updated_at)
+                        time_since_update = (now - updated_at).total_seconds()
                         
                         # Resume if job is stuck (no update in last 2 minutes) or very old (5+ minutes)
                         if time_since_update > 120 or time_since_start > 300:  # 2 minutes or 5 minutes
@@ -5760,10 +5776,17 @@ def api_get_bulk_job_status(job_id):
                 print(f"ℹ️  Job {job_id} status changed to '{job.status}', skipping auto-recovery")
             else:
                 time_since_update = None
+                now = datetime.now(tz=ist)
                 if job.updated_at:
-                    time_since_update = (datetime.now(ist) - job.updated_at).total_seconds()
+                    updated_at = job.updated_at
+                    if updated_at.tzinfo is None:
+                        updated_at = ist.localize(updated_at)
+                    time_since_update = (now - updated_at).total_seconds()
                 elif job.started_at:
-                    time_since_update = (datetime.now(ist) - job.started_at).total_seconds()
+                    started_at = job.started_at
+                    if started_at.tzinfo is None:
+                        started_at = ist.localize(started_at)
+                    time_since_update = (now - started_at).total_seconds()
                 
                 if time_since_update and time_since_update > 120:  # 2 minutes without update
                     print(f"🔄 Auto-recovering stuck job {job_id} (no update for {time_since_update:.0f}s)")
@@ -5829,10 +5852,11 @@ def api_get_bulk_job_status(job_id):
         eta_seconds = None
         if job.status == 'processing' and job.started_at and processed_count > 0:
             # Handle timezone-naive vs timezone-aware datetimes
+            now = datetime.now(tz=ist)
             started_at = job.started_at
             if started_at.tzinfo is None:
                 started_at = ist.localize(started_at)
-            elapsed = (datetime.now(ist) - started_at).total_seconds()
+            elapsed = (now - started_at).total_seconds()
             if elapsed > 0:
                 rate = processed_count / elapsed  # messages per second
                 remaining = job.total_recipients - processed_count
