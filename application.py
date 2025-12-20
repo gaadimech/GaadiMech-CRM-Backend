@@ -11,6 +11,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import json
 from pywebpush import webpush, WebPushException
+from services.firebase_notifications import (
+    initialize_firebase, send_fcm_notification, send_fcm_notification_multicast
+)
 import pytz
 import os
 import sys
@@ -4687,7 +4690,7 @@ from routes.common import serve_frontend
 # ==================== PUSH NOTIFICATION FUNCTIONS ====================
 
 def send_push_notification(user_id, title, body, url=None):
-    """Send push notification to all subscriptions of a user"""
+    """Send push notification to all subscriptions of a user (supports both VAPID and FCM)"""
     timestamp = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
     print(f"\n{'='*60}")
     print(f"[{timestamp}] 🔔 PUSH NOTIFICATION ATTEMPT")
@@ -4708,84 +4711,168 @@ def send_push_notification(user_id, title, body, url=None):
             print(f"{'='*60}\n")
             return
 
-        # Get VAPID keys from environment
-        vapid_private_key = os.getenv('VAPID_PRIVATE_KEY')
-        vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
-        vapid_claim_email = os.getenv('VAPID_CLAIM_EMAIL', 'mailto:admin@gaadimech.com')
+        # Debug: Print all subscriptions to understand what we have
+        print(f"\n--- Subscription Details ---")
+        for s in subscriptions:
+            print(f"  Subscription ID: {s.id}")
+            print(f"    Type: {s.subscription_type or 'NULL'}")
+            print(f"    Has FCM Token: {bool(s.fcm_token)}")
+            print(f"    Has Endpoint: {bool(s.endpoint)}")
+            print(f"    FCM Token (first 30 chars): {s.fcm_token[:30] if s.fcm_token else 'N/A'}...")
+            print(f"    Created: {s.created_at}")
+            print(f"    Updated: {s.updated_at}")
+        print(f"--- End Subscription Details ---\n")
 
-        print(f"VAPID Private Key: {'✅ Present' if vapid_private_key else '❌ Missing'}")
-        print(f"VAPID Public Key: {'✅ Present' if vapid_public_key else '❌ Missing'}")
-        print(f"VAPID Claim Email: {vapid_claim_email}")
+        # Separate FCM and VAPID subscriptions
+        # FCM: Must have fcm_token AND subscription_type == 'fcm' (or NULL/empty for backward compatibility)
+        fcm_subscriptions = [
+            s for s in subscriptions 
+            if s.fcm_token and (s.subscription_type == 'fcm' or not s.subscription_type or s.subscription_type == '')
+        ]
+        # VAPID: Must have endpoint AND (subscription_type == 'vapid' OR NULL/empty for backward compatibility)
+        vapid_subscriptions = [
+            s for s in subscriptions 
+            if s.endpoint and (s.subscription_type == 'vapid' or not s.subscription_type or s.subscription_type == '')
+        ]
 
-        if not vapid_private_key or not vapid_public_key:
-            print("❌ VAPID keys not configured. Push notifications disabled.")
-            print(f"{'='*60}\n")
-            return
-
-        # Prepare notification payload
-        notification_data = {
-            'title': title,
-            'body': body,
-            'icon': '/icon-192x192.png',  # You can add this icon later
-            'badge': '/badge-72x72.png',  # You can add this badge later
-            'tag': 'lead-assignment',
-            'requireInteraction': False,
-            'data': {
-                'url': url or '/todays-leads'
-            }
-        }
-
-        print(f"Notification Title: {title}")
-        print(f"Notification Body: {body}")
-        print(f"Notification URL: {url or '/todays-leads'}")
+        print(f"FCM subscriptions: {len(fcm_subscriptions)}")
+        print(f"VAPID subscriptions: {len(vapid_subscriptions)}")
 
         success_count = 0
         failed_count = 0
 
-        for idx, subscription in enumerate(subscriptions, 1):
-            print(f"\n--- Processing Subscription {idx}/{len(subscriptions)} ---")
-            print(f"Subscription ID: {subscription.id}")
-            print(f"Endpoint: {subscription.endpoint[:50]}...")
-            print(f"User Agent: {subscription.user_agent or 'N/A'}")
-            print(f"Created At: {subscription.created_at}")
-
+        # Send FCM notifications
+        if fcm_subscriptions:
+            print(f"\n--- Sending FCM Notifications ({len(fcm_subscriptions)} tokens) ---")
             try:
-                subscription_info = {
-                    'endpoint': subscription.endpoint,
-                    'keys': {
-                        'p256dh': subscription.p256dh,
-                        'auth': subscription.auth
+                # Initialize Firebase
+                initialize_firebase()
+                
+                # Collect FCM tokens
+                fcm_tokens = [s.fcm_token for s in fcm_subscriptions if s.fcm_token]
+                
+                if fcm_tokens:
+                    # Prepare notification data
+                    notification_data = {
+                        'tag': 'lead-assignment',
+                        'url': url or '/todays-leads'
+                    }
+                    
+                    # Send tokens individually (more reliable than multicast which has batch API issues)
+                    print(f"   📤 Sending to {len(fcm_tokens)} FCM token(s) individually...")
+                    for idx, token in enumerate(fcm_tokens):
+                        print(f"   📤 Sending to token {idx + 1}/{len(fcm_tokens)}...")
+                        success = send_fcm_notification(
+                            fcm_token=token,
+                            title=title,
+                            body=body,
+                            data=notification_data,
+                            url=url or '/todays-leads'
+                        )
+                        if success:
+                            success_count += 1
+                            print(f"   ✅ Token {idx + 1} sent successfully")
+                        else:
+                            failed_count += 1
+                            # Remove invalid token
+                            subscription = fcm_subscriptions[idx]
+                            print(f"   🗑️  Removing invalid FCM subscription {subscription.id}")
+                            db.session.delete(subscription)
+                    
+                    if failed_count > 0:
+                        db.session.commit()
+                    
+                    print(f"✅ FCM: {success_count} successful, {failed_count} failed")
+            except Exception as e:
+                print(f"❌ Error sending FCM notifications: {e}")
+                import traceback
+                traceback.print_exc()
+                failed_count += len(fcm_subscriptions)
+
+        # Send VAPID notifications (backward compatibility)
+        if vapid_subscriptions:
+            print(f"\n--- Sending VAPID Notifications ({len(vapid_subscriptions)} subscriptions) ---")
+            
+            # Get VAPID keys from environment
+            vapid_private_key = os.getenv('VAPID_PRIVATE_KEY')
+            vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
+            vapid_claim_email = os.getenv('VAPID_CLAIM_EMAIL', 'mailto:admin@gaadimech.com')
+
+            # Fix VAPID private key format - ensure newlines are preserved
+            if vapid_private_key:
+                # Remove surrounding quotes if present
+                vapid_private_key = vapid_private_key.strip('"\'')
+                # Handle different newline formats
+                # First, try to replace escaped newlines
+                if '\\n' in vapid_private_key:
+                    vapid_private_key = vapid_private_key.replace('\\n', '\n')
+                # Also handle raw string newlines
+                elif r'\n' in vapid_private_key:
+                    vapid_private_key = vapid_private_key.replace(r'\n', '\n')
+                # Ensure the key has proper BEGIN/END markers with newlines
+                if 'BEGIN PRIVATE KEY' in vapid_private_key and '\n' not in vapid_private_key:
+                    # If no newlines at all, try to add them around markers
+                    vapid_private_key = vapid_private_key.replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
+                    vapid_private_key = vapid_private_key.replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----')
+
+            if not vapid_private_key or not vapid_public_key:
+                print("⚠️  VAPID keys not configured. Skipping VAPID notifications.")
+            else:
+                # Prepare notification payload
+                notification_data = {
+                    'title': title,
+                    'body': body,
+                    'icon': '/icon-192x192.png',
+                    'badge': '/badge-72x72.png',
+                    'tag': 'lead-assignment',
+                    'requireInteraction': False,
+                    'data': {
+                        'url': url or '/todays-leads'
                     }
                 }
 
-                print("Sending webpush...")
-                webpush(
-                    subscription_info=subscription_info,
-                    data=json.dumps(notification_data),
-                    vapid_private_key=vapid_private_key,
-                    vapid_claims={
-                        'sub': vapid_claim_email
-                    }
-                )
-                success_count += 1
-                print(f"✅ Successfully sent push notification to subscription {subscription.id}")
-            except WebPushException as e:
-                print(f"❌ Failed to send push notification to subscription {subscription.id}")
-                print(f"   Error: {e}")
-                if e.response:
-                    print(f"   Response Status: {e.response.status_code}")
-                    print(f"   Response Text: {e.response.text[:200]}")
-                # If subscription is invalid, remove it
-                if e.response and e.response.status_code in [410, 404]:
-                    print(f"   🗑️  Removing invalid subscription {subscription.id} (status {e.response.status_code})")
-                    db.session.delete(subscription)
-                    db.session.commit()
-                failed_count += 1
-            except Exception as e:
-                print(f"❌ Unexpected error sending push notification: {e}")
-                import traceback
-                traceback.print_exc()
-                failed_count += 1
+                for idx, subscription in enumerate(vapid_subscriptions, 1):
+                    print(f"\n--- Processing VAPID Subscription {idx}/{len(vapid_subscriptions)} ---")
+                    print(f"Subscription ID: {subscription.id}")
+                    print(f"Endpoint: {subscription.endpoint[:50] if subscription.endpoint else 'N/A'}...")
+
+                    try:
+                        subscription_info = {
+                            'endpoint': subscription.endpoint,
+                            'keys': {
+                                'p256dh': subscription.p256dh,
+                                'auth': subscription.auth
+                            }
+                        }
+
+                        print("Sending VAPID webpush...")
+                        webpush(
+                            subscription_info=subscription_info,
+                            data=json.dumps(notification_data),
+                            vapid_private_key=vapid_private_key,
+                            vapid_claims={
+                                'sub': vapid_claim_email
+                            }
+                        )
+                        success_count += 1
+                        print(f"✅ Successfully sent VAPID notification to subscription {subscription.id}")
+                    except WebPushException as e:
+                        print(f"❌ Failed to send VAPID notification to subscription {subscription.id}")
+                        print(f"   Error: {e}")
+                        if e.response:
+                            print(f"   Response Status: {e.response.status_code}")
+                            print(f"   Response Text: {e.response.text[:200]}")
+                        # If subscription is invalid, remove it
+                        if e.response and e.response.status_code in [410, 404]:
+                            print(f"   🗑️  Removing invalid subscription {subscription.id} (status {e.response.status_code})")
+                            db.session.delete(subscription)
+                            db.session.commit()
+                        failed_count += 1
+                    except Exception as e:
+                        print(f"❌ Unexpected error sending VAPID notification: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        failed_count += 1
 
         print(f"\n{'='*60}")
         print(f"📊 SUMMARY: {success_count} successful, {failed_count} failed")
@@ -4800,7 +4887,7 @@ def send_push_notification(user_id, title, body, url=None):
 @application.route('/api/push/subscribe', methods=['POST', 'OPTIONS'])
 @login_required
 def api_push_subscribe():
-    """Register or update push notification subscription"""
+    """Register or update push notification subscription (supports both VAPID and FCM)"""
     if request.method == 'OPTIONS':
         response = make_response()
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
@@ -4814,49 +4901,96 @@ def api_push_subscribe():
             return jsonify({'success': False, 'message': 'Invalid request format'}), 400
 
         data = request.get_json()
-        endpoint = data.get('endpoint')
-        p256dh = data.get('keys', {}).get('p256dh')
-        auth = data.get('keys', {}).get('auth')
         user_agent = request.headers.get('User-Agent', '')
-
-        if not endpoint or not p256dh or not auth:
-            return jsonify({'success': False, 'message': 'Missing required subscription data'}), 400
-
-        # Check if subscription already exists
-        existing = PushSubscription.query.filter_by(
-            user_id=current_user.id,
-            endpoint=endpoint
-        ).first()
-
         timestamp = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
-        if existing:
-            # Update existing subscription
-            print(f"\n[{timestamp}] 🔄 Updating existing push subscription")
-            print(f"   User: {current_user.name} (ID: {current_user.id}, username: {current_user.username})")
-            print(f"   Subscription ID: {existing.id}")
-            print(f"   Endpoint: {endpoint[:60]}...")
-            existing.p256dh = p256dh
-            existing.auth = auth
-            existing.user_agent = user_agent
-            existing.updated_at = datetime.now(ist)
-        else:
-            # Create new subscription
-            print(f"\n[{timestamp}] ✅ New push subscription registered")
-            print(f"   User: {current_user.name} (ID: {current_user.id}, username: {current_user.username})")
-            print(f"   Endpoint: {endpoint[:60]}...")
-            print(f"   User Agent: {user_agent[:100] if user_agent else 'N/A'}")
-            subscription = PushSubscription(
-                user_id=current_user.id,
-                endpoint=endpoint,
-                p256dh=p256dh,
-                auth=auth,
-                user_agent=user_agent
-            )
-            db.session.add(subscription)
 
-        db.session.commit()
-        print(f"   ✅ Subscription saved successfully\n")
-        return jsonify({'success': True, 'message': 'Push subscription registered successfully'})
+        # Check if this is an FCM token subscription
+        fcm_token = data.get('fcm_token')
+        
+        if fcm_token:
+            # FCM token subscription
+            print(f"\n[{timestamp}] 🔔 FCM Token Subscription")
+            print(f"   User: {current_user.name} (ID: {current_user.id}, username: {current_user.username})")
+            print(f"   FCM Token: {fcm_token[:50]}...")
+            
+            if not fcm_token:
+                return jsonify({'success': False, 'message': 'Missing FCM token'}), 400
+
+            # Check if FCM subscription already exists
+            existing = PushSubscription.query.filter_by(
+                user_id=current_user.id,
+                fcm_token=fcm_token
+            ).first()
+
+            if existing:
+                # Update existing FCM subscription
+                print(f"   🔄 Updating existing FCM subscription (ID: {existing.id})")
+                print(f"   Previous subscription_type: {existing.subscription_type or 'NULL'}")
+                existing.user_agent = user_agent
+                existing.updated_at = datetime.now(ist)
+                existing.subscription_type = 'fcm'  # Ensure it's set to 'fcm'
+                existing.fcm_token = fcm_token  # Update token in case it changed
+                print(f"   Updated subscription_type to: {existing.subscription_type}")
+            else:
+                # Create new FCM subscription
+                print(f"   ✅ New FCM subscription registered")
+                print(f"   User Agent: {user_agent[:100] if user_agent else 'N/A'}")
+                subscription = PushSubscription(
+                    user_id=current_user.id,
+                    fcm_token=fcm_token,
+                    subscription_type='fcm',
+                    user_agent=user_agent
+                )
+                db.session.add(subscription)
+
+            db.session.commit()
+            print(f"   ✅ FCM subscription saved successfully\n")
+            return jsonify({'success': True, 'message': 'FCM subscription registered successfully'})
+        
+        else:
+            # VAPID subscription (backward compatibility)
+            endpoint = data.get('endpoint')
+            p256dh = data.get('keys', {}).get('p256dh')
+            auth = data.get('keys', {}).get('auth')
+
+            if not endpoint or not p256dh or not auth:
+                return jsonify({'success': False, 'message': 'Missing required subscription data (endpoint, keys)'}), 400
+
+            print(f"\n[{timestamp}] 🔔 VAPID Subscription")
+            print(f"   User: {current_user.name} (ID: {current_user.id}, username: {current_user.username})")
+            print(f"   Endpoint: {endpoint[:60]}...")
+
+            # Check if VAPID subscription already exists
+            existing = PushSubscription.query.filter_by(
+                user_id=current_user.id,
+                endpoint=endpoint
+            ).first()
+
+            if existing:
+                # Update existing VAPID subscription
+                print(f"   🔄 Updating existing VAPID subscription (ID: {existing.id})")
+                existing.p256dh = p256dh
+                existing.auth = auth
+                existing.user_agent = user_agent
+                existing.updated_at = datetime.now(ist)
+                existing.subscription_type = 'vapid'
+            else:
+                # Create new VAPID subscription
+                print(f"   ✅ New VAPID subscription registered")
+                print(f"   User Agent: {user_agent[:100] if user_agent else 'N/A'}")
+                subscription = PushSubscription(
+                    user_id=current_user.id,
+                    endpoint=endpoint,
+                    p256dh=p256dh,
+                    auth=auth,
+                    subscription_type='vapid',
+                    user_agent=user_agent
+                )
+                db.session.add(subscription)
+
+            db.session.commit()
+            print(f"   ✅ VAPID subscription saved successfully\n")
+            return jsonify({'success': True, 'message': 'Push subscription registered successfully'})
 
     except Exception as e:
         db.session.rollback()
@@ -4892,7 +5026,7 @@ def api_push_vapid_public_key():
 @application.route('/api/push/unsubscribe', methods=['POST', 'OPTIONS'])
 @login_required
 def api_push_unsubscribe():
-    """Remove push notification subscription"""
+    """Remove push notification subscription (supports both VAPID and FCM)"""
     if request.method == 'OPTIONS':
         response = make_response()
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
@@ -4906,20 +5040,29 @@ def api_push_unsubscribe():
             return jsonify({'success': False, 'message': 'Invalid request format'}), 400
 
         data = request.get_json()
+        fcm_token = data.get('fcm_token')
         endpoint = data.get('endpoint')
 
-        if not endpoint:
-            return jsonify({'success': False, 'message': 'Missing endpoint'}), 400
+        subscription = None
 
-        # Find and delete subscription
-        subscription = PushSubscription.query.filter_by(
-            user_id=current_user.id,
-            endpoint=endpoint
-        ).first()
+        # Try to find by FCM token first
+        if fcm_token:
+            subscription = PushSubscription.query.filter_by(
+                user_id=current_user.id,
+                fcm_token=fcm_token
+            ).first()
+        
+        # If not found and endpoint provided, try VAPID
+        if not subscription and endpoint:
+            subscription = PushSubscription.query.filter_by(
+                user_id=current_user.id,
+                endpoint=endpoint
+            ).first()
 
         if subscription:
             db.session.delete(subscription)
             db.session.commit()
+            print(f"✅ Removed push subscription (ID: {subscription.id}, Type: {subscription.subscription_type})")
             return jsonify({'success': True, 'message': 'Push subscription removed successfully'})
         else:
             return jsonify({'success': False, 'message': 'Subscription not found'}), 404
@@ -4927,6 +5070,8 @@ def api_push_unsubscribe():
     except Exception as e:
         db.session.rollback()
         print(f"Error removing push subscription: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': 'Failed to remove subscription'}), 500
 
 @application.route('/api/push/debug/subscriptions', methods=['GET'])
@@ -4990,6 +5135,173 @@ def api_push_debug_subscriptions():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@application.route('/api/push/debug/user-subscriptions', methods=['GET', 'OPTIONS'])
+@login_required
+def api_push_debug_user_subscriptions():
+    """Debug endpoint to check push subscriptions for a specific user (Admin only)"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
+        return response
+    
+    try:
+        if not current_user.is_admin:
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({'error': 'user_id parameter required'}), 400
+        
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': f'User {user_id} not found'}), 404
+        
+        subscriptions = PushSubscription.query.filter_by(user_id=user_id).all()
+        
+        subscriptions_data = []
+        for sub in subscriptions:
+            subscriptions_data.append({
+                'id': sub.id,
+                'subscription_type': sub.subscription_type,
+                'has_fcm_token': bool(sub.fcm_token),
+                'fcm_token_preview': sub.fcm_token[:50] + '...' if sub.fcm_token and len(sub.fcm_token) > 50 else sub.fcm_token,
+                'has_vapid_endpoint': bool(sub.endpoint),
+                'endpoint_preview': sub.endpoint[:50] + '...' if sub.endpoint and len(sub.endpoint) > 50 else sub.endpoint,
+                'user_agent': sub.user_agent,
+                'created_at': sub.created_at.isoformat() if sub.created_at else None,
+                'updated_at': sub.updated_at.isoformat() if sub.updated_at else None,
+            })
+        
+        fcm_count = len([s for s in subscriptions if s.fcm_token and s.subscription_type == 'fcm'])
+        vapid_count = len([s for s in subscriptions if s.endpoint and (s.subscription_type == 'vapid' or not s.subscription_type)])
+        
+        return jsonify({
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'name': user.name
+            },
+            'total_subscriptions': len(subscriptions),
+            'fcm_subscriptions': fcm_count,
+            'vapid_subscriptions': vapid_count,
+            'subscriptions': subscriptions_data
+        })
+    except Exception as e:
+        print(f"Error in api_push_debug_user_subscriptions: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@application.route('/api/test/firebase', methods=['GET', 'OPTIONS'])
+@login_required
+def test_firebase():
+    """Test endpoint to verify Firebase initialization (Admin only)"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
+        return response
+    
+    try:
+        # Only admins can test
+        if not current_user.is_admin:
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+        
+        from services.firebase_notifications import initialize_firebase
+        
+        # Check environment variables
+        project_id = os.getenv('FIREBASE_PROJECT_ID')
+        client_email = os.getenv('FIREBASE_CLIENT_EMAIL')
+        private_key = os.getenv('FIREBASE_PRIVATE_KEY')
+        
+        env_status = {
+            'FIREBASE_PROJECT_ID': '✅ Set' if project_id else '❌ Missing',
+            'FIREBASE_CLIENT_EMAIL': '✅ Set' if client_email else '❌ Missing',
+            'FIREBASE_PRIVATE_KEY': '✅ Set' if private_key else '❌ Missing',
+        }
+        
+        # Try to initialize Firebase
+        try:
+            app = initialize_firebase()
+            if app:
+                return jsonify({
+                    'success': True,
+                    'message': 'Firebase initialized successfully',
+                    'environment_variables': env_status,
+                    'project_id': project_id
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Firebase initialization returned None',
+                    'environment_variables': env_status
+                }), 500
+        except Exception as init_error:
+            return jsonify({
+                'success': False,
+                'message': 'Firebase initialization failed',
+                'error': str(init_error),
+                'environment_variables': env_status
+            }), 500
+    
+    except Exception as e:
+        print(f"Error in test_firebase: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@application.route('/api/test/push-notification', methods=['POST', 'OPTIONS'])
+@login_required
+def test_push_notification():
+    """Test endpoint to send push notification to any user (Admin only)"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
+        return response
+    
+    try:
+        # Only admins can test notifications
+        if not current_user.is_admin:
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+        
+        if not request.is_json:
+            return jsonify({'success': False, 'error': 'Invalid request format'}), 400
+        
+        data = request.get_json()
+        user_id = data.get('user_id')
+        title = data.get('title', 'Test Notification')
+        body = data.get('body', 'This is a test push notification')
+        url = data.get('url', '/todays-leads')
+        
+        if not user_id:
+            return jsonify({'success': False, 'error': 'user_id is required'}), 400
+        
+        # Send notification
+        print(f"\n🧪 TEST: Sending push notification to user {user_id}")
+        send_push_notification(user_id, title, body, url)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Test notification sent to user {user_id}',
+            'user_id': user_id,
+            'title': title,
+            'body': body
+        })
+    
+    except Exception as e:
+        print(f"Error in test_push_notification: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @application.route('/api/push/debug/user-by-username', methods=['GET'])
 @login_required

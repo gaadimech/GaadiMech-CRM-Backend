@@ -36,3 +36,4 @@ memory-profiler==0.61.0
 # Push notifications
 pywebpush==1.14.0
 py-vapid==1.9.0
+firebase-admin==6.2.0

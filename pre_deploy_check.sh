@@ -31,6 +31,7 @@ REQUIRED_FILES=(
     "routes/common.py"
     "services/__init__.py"
     "services/database.py"
+    "services/firebase_notifications.py"
 )
 
 for file in "${REQUIRED_FILES[@]}"; do
@@ -61,6 +62,7 @@ from models import User, Lead
 from utils import normalize_mobile_number
 from routes.auth import auth_bp
 from services.database import init_database
+from services.firebase_notifications import initialize_firebase, send_fcm_notification
 " 2>/dev/null; then
     echo -e "   ${GREEN}✅${NC} All module imports successful"
 else
@@ -110,4 +112,5 @@ else
     echo -e "${RED}Please fix errors before deploying${NC}"
     exit 1
 fi
+
 

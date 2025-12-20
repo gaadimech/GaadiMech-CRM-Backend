@@ -116,19 +116,23 @@ class TeamAssignment(db.Model):
 
 
 class PushSubscription(db.Model):
-    """Store push notification subscriptions for users"""
+    """Store push notification subscriptions for users (supports both VAPID and FCM)"""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    endpoint = db.Column(db.Text, nullable=False)
-    p256dh = db.Column('p256dh_key', db.Text, nullable=False)
-    auth = db.Column('auth_key', db.Text, nullable=False)
+    endpoint = db.Column(db.Text, nullable=True)  # VAPID endpoint (nullable for FCM-only)
+    p256dh = db.Column('p256dh_key', db.Text, nullable=True)  # VAPID key (nullable for FCM-only)
+    auth = db.Column('auth_key', db.Text, nullable=True)  # VAPID key (nullable for FCM-only)
+    fcm_token = db.Column(db.Text, nullable=True)  # FCM registration token (nullable for VAPID-only)
+    subscription_type = db.Column(db.String(20), default='vapid')  # 'vapid' or 'fcm'
     user_agent = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(ist))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(ist), onupdate=lambda: datetime.now(ist))
 
     user = db.relationship('User', backref='push_subscriptions')
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'endpoint', name='unique_user_endpoint'),
+        db.UniqueConstraint('user_id', 'fcm_token', name='unique_user_fcm_token'),
     )
 
 
