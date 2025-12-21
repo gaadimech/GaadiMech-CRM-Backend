@@ -90,3 +90,4 @@ echo "Note: The environment will restart automatically. This may take a few minu
 echo "You can check the status with:"
 echo "  aws elasticbeanstalk describe-environments --environment-names $ENVIRONMENT_NAME --region $REGION"
 
+
