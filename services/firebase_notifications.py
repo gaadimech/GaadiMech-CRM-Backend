@@ -4,6 +4,7 @@ Handles sending push notifications via Firebase Admin SDK
 """
 import os
 import json
+import re
 import firebase_admin
 from firebase_admin import credentials, messaging
 from datetime import datetime
@@ -22,31 +23,63 @@ def initialize_firebase():
         return _firebase_app
     
     try:
-        # Option 1: Service account JSON file path
+        # Option 1: Service account JSON file path (from environment variable)
         service_account_path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
         
-        # Option 2: Service account JSON as string
+        # Option 2: Check for file in repo (fallback)
+        # Try multiple possible locations
+        current_dir = os.path.dirname(__file__)  # services/
+        backend_dir = os.path.dirname(current_dir)  # GaadiMech-CRM-Backend/
+        repo_root = os.path.dirname(backend_dir)  # GaadiMechCRM/
+        
+        possible_paths = [
+            service_account_path,  # From env var
+            os.path.join(backend_dir, 'gaadimech-crm-firebase-adminsdk-fbsvc-d239efed44.json'),  # In backend dir
+            os.path.join(repo_root, 'gaadimech-crm-firebase-adminsdk-fbsvc-d239efed44.json'),  # In repo root
+            '/var/app/current/gaadimech-crm-firebase-adminsdk-fbsvc-d239efed44.json',  # AWS deployment (if copied to backend)
+            '/var/app/current/../gaadimech-crm-firebase-adminsdk-fbsvc-d239efed44.json',  # AWS deployment (repo root)
+        ]
+        
+        # Option 3: Service account JSON as string
         service_account_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
         
-        # Option 3: Individual credentials from environment
+        # Option 4: Individual credentials from environment
         project_id = os.getenv('FIREBASE_PROJECT_ID')
         private_key = os.getenv('FIREBASE_PRIVATE_KEY')
         client_email = os.getenv('FIREBASE_CLIENT_EMAIL')
         
         cred = None
         
-        if service_account_path and os.path.exists(service_account_path):
-            # Load from file
-            cred = credentials.Certificate(service_account_path)
-            print("✅ Firebase initialized from service account file")
-        elif service_account_json:
-            # Load from JSON string
+        # Try to find and load from file
+        for path in possible_paths:
+            if path and os.path.exists(path):
+                try:
+                    cred = credentials.Certificate(path)
+                    print(f"✅ Firebase initialized from service account file: {path}")
+                    break
+                except Exception as e:
+                    print(f"   ⚠️  Failed to load from {path}: {e}")
+                    continue
+        
+        # If file loading didn't work, try JSON string
+        if not cred and service_account_json:
+            # Load from JSON string (may be base64-encoded to avoid escape sequence issues)
             try:
                 print(f"   Attempting to parse FIREBASE_SERVICE_ACCOUNT_JSON...")
                 print(f"   JSON length: {len(service_account_json)} characters")
                 print(f"   JSON preview (first 100 chars): {service_account_json[:100]}...")
                 
-                service_account_dict = json.loads(service_account_json)
+                # Try to decode as base64 first (if it was stored base64-encoded)
+                # If it fails, assume it's already a JSON string
+                try:
+                    import base64
+                    decoded_json = base64.b64decode(service_account_json).decode('utf-8')
+                    print("   ✅ Decoded from base64")
+                    service_account_dict = json.loads(decoded_json)
+                except Exception:
+                    # Not base64-encoded, parse as regular JSON string
+                    print("   ℹ️  Not base64-encoded, parsing as regular JSON")
+                    service_account_dict = json.loads(service_account_json)
                 print("   ✅ JSON parsed successfully")
                 
                 # Validate that required fields are present
@@ -70,27 +103,151 @@ def initialize_firebase():
                 print(f"   Private key has escaped newlines: {has_escaped_newlines}")
                 print(f"   Private key starts with BEGIN: {private_key.startswith('-----BEGIN')}")
                 print(f"   Private key ends with END: {private_key.endswith('-----END PRIVATE KEY-----')}")
+                # Show last 50 characters to see what's at the end
+                print(f"   Private key (last 50 chars): ...{private_key[-50:]}")
+                # Check if END marker exists anywhere
+                has_end_marker = '-----END PRIVATE KEY-----' in private_key
+                print(f"   Private key contains END marker: {has_end_marker}")
                 
                 # Fix private key newlines if needed
                 # json.loads() should convert \n to actual newlines, but AWS might double-escape
+                actual_newline = '\n'
+                fixed_key = private_key
+                
                 if escaped_newline_str in private_key:
                     # Check if we have literal \n (double-escaped) vs actual newlines
-                    actual_newline = '\n'
                     if actual_newline not in private_key:
                         # Only escaped newlines, no actual newlines - need to convert
-                        service_account_dict['private_key'] = private_key.replace(escaped_newline_str, actual_newline)
+                        fixed_key = private_key.replace(escaped_newline_str, actual_newline)
                         print("   ✅ Fixed escaped newlines in private_key (converted \\n to actual newlines)")
                     else:
                         # Has both - remove escaped ones
-                        service_account_dict['private_key'] = private_key.replace(escaped_newline_str, '')
+                        fixed_key = private_key.replace(escaped_newline_str, '')
                         print("   ✅ Removed double-escaped newlines from private_key")
+                elif actual_newline not in private_key:
+                    # No newlines at all - JSON was compacted and newlines were removed
+                    # Check if literal 'n' characters exist (from \n escape sequences)
+                    if '-----BEGIN PRIVATE KEY-----n' in private_key or 'n-----END PRIVATE KEY-----' in private_key:
+                        # The \n escape sequences became literal 'n' characters
+                        print("   ⚠️  Found literal 'n' characters (from \\n escape sequences) - converting to newlines...")
+                        
+                        begin_marker = '-----BEGIN PRIVATE KEY-----'
+                        end_marker = '-----END PRIVATE KEY-----'
+                        begin_pos = private_key.find(begin_marker)
+                        end_pos = private_key.find(end_marker)
+                        
+                        if begin_pos != -1 and end_pos != -1:
+                            # Extract the base64 content (with literal 'n' characters)
+                            base64_start = begin_pos + len(begin_marker)
+                            base64_with_n = private_key[base64_start:end_pos]
+                            
+                            # Remove 'n' only at known safe positions:
+                            # 1. 'n' immediately after BEGIN (already handled by the string)
+                            # 2. 'n' at 64-character boundaries (these are newlines)
+                            # 3. 'n' immediately before END marker
+                            
+                            # Strategy: Process character by character, replacing 'n' only at 64-char boundaries
+                            base64_clean = ""
+                            char_count = 0
+                            i = 0
+                            while i < len(base64_with_n):
+                                char = base64_with_n[i]
+                                
+                                # If we've seen exactly 64 base64 characters and next char is 'n' followed by base64 or END
+                                if char_count == 64 and char == 'n':
+                                    # Check if next character is base64 or we're near the end
+                                    if i + 1 < len(base64_with_n):
+                                        next_char = base64_with_n[i + 1]
+                                        # If next char is base64 start or we're close to END, this 'n' is a newline
+                                        if next_char in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=' or base64_with_n[i+1:].startswith('-----END'):
+                                            base64_clean += '\n'
+                                            char_count = 0
+                                            i += 1
+                                            continue
+                                    # If we're at the end and 'n' is before END marker, it's a newline
+                                    if base64_with_n[i+1:].strip().startswith('-----END'):
+                                        base64_clean += '\n'
+                                        char_count = 0
+                                        i += 1
+                                        continue
+                                
+                                # Regular character (including 'n' that's part of base64 data)
+                                if char in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=':
+                                    base64_clean += char
+                                    char_count += 1
+                                elif char == 'n' and char_count < 64:
+                                    # 'n' in the middle of a line - it's base64 data
+                                    base64_clean += char
+                                    char_count += 1
+                                # Skip any other characters (whitespace, etc.)
+                                
+                                i += 1
+                            
+                            # Handle 'n' before END marker (safe to replace)
+                            base64_clean = base64_clean.rstrip('n') + '\n'
+                            
+                            # Reconstruct PEM with proper formatting
+                            # Split base64 into 64-character lines
+                            base64_lines = []
+                            for j in range(0, len(base64_clean), 64):
+                                line = base64_clean[j:j+64]
+                                if line.strip():  # Skip empty lines
+                                    base64_lines.append(line.rstrip('\n'))
+                            
+                            # Reconstruct full private key
+                            fixed_key = begin_marker + '\n'
+                            fixed_key += '\n'.join(base64_lines)
+                            fixed_key += '\n' + end_marker + '\n'
+                            
+                            print("   ✅ Reconstructed private key with proper newlines")
+                        else:
+                            # Fallback: simple replacement
+                            fixed_key = private_key.replace('-----BEGIN PRIVATE KEY-----n', '-----BEGIN PRIVATE KEY-----\n')
+                            fixed_key = fixed_key.replace('n-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----')
+                            fixed_key = fixed_key.replace('-----END PRIVATE KEY-----n', '-----END PRIVATE KEY-----\n')
+                            fixed_key = re.sub(r'([A-Za-z0-9+/=]{64})n([A-Za-z0-9+/]|-----)', r'\1\n\2', fixed_key)
+                            print("   ✅ Converted literal 'n' characters to actual newlines (fallback)")
+                    else:
+                        # No literal 'n' either - JSON was compacted and newlines were completely removed
+                        print("   ⚠️  No newlines found in private_key - restoring them...")
+                        fixed_key = fixed_key.replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n', 1)
+                        
+                        # Check if END marker exists
+                        if '-----END PRIVATE KEY-----' in fixed_key:
+                            # END marker exists, just add newlines around it
+                            fixed_key = fixed_key.replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----\n', 1)
+                            print("   ✅ Restored newlines around existing END marker")
+                        else:
+                            # END marker is completely missing - append it
+                            print("   ⚠️  END marker completely missing - appending it...")
+                            # Remove any trailing whitespace and append END marker with newlines
+                            fixed_key = fixed_key.rstrip() + '\n-----END PRIVATE KEY-----\n'
+                            print("   ✅ Appended missing END marker to private_key")
                 
                 # Final validation
-                final_key = service_account_dict['private_key']
+                final_key = fixed_key
                 if not final_key.startswith('-----BEGIN PRIVATE KEY-----'):
                     raise ValueError("Private key missing BEGIN marker after processing")
-                if not final_key.endswith('-----END PRIVATE KEY-----\n') and not final_key.endswith('-----END PRIVATE KEY-----'):
+                if '-----END PRIVATE KEY-----' not in final_key:
                     raise ValueError("Private key missing END marker after processing")
+                
+                # Ensure it ends with END marker (with or without newline)
+                if not final_key.endswith('-----END PRIVATE KEY-----\n') and not final_key.endswith('-----END PRIVATE KEY-----'):
+                    # END marker exists but not at the end - this shouldn't happen, but let's fix it
+                    if final_key.rstrip().endswith('-----END PRIVATE KEY-----'):
+                        # Just add newline
+                        final_key = final_key.rstrip() + '\n'
+                        print("   ✅ Added trailing newline to private_key")
+                    else:
+                        # END marker is in the middle somehow - move it to the end
+                        print("   ⚠️  END marker not at end - fixing...")
+                        # Remove END marker from wherever it is
+                        final_key = final_key.replace('-----END PRIVATE KEY-----', '').replace('\n\n', '\n')
+                        # Append it at the end
+                        final_key = final_key.rstrip() + '\n-----END PRIVATE KEY-----\n'
+                        print("   ✅ Moved END marker to end of private_key")
+                
+                service_account_dict['private_key'] = final_key
                 
                 print(f"   Final private key length: {len(final_key)} characters")
                 print(f"   Final private key newline count: {final_key.count(chr(10))}")
@@ -104,7 +261,9 @@ def initialize_firebase():
                 print(f"   JSON string (first 500 chars): {service_account_json[:500]}...")
                 print(f"   JSON string (last 200 chars): ...{service_account_json[-200:]}")
                 raise
-        elif project_id and private_key and client_email:
+        
+        # If file and JSON string didn't work, try individual credentials
+        if not cred and project_id and private_key and client_email:
             # Load from individual environment variables
             # Fix private key format - handle both escaped and literal newlines
             private_key_clean = private_key.strip('"\'')  # Remove surrounding quotes
@@ -191,7 +350,8 @@ def send_fcm_notification(fcm_token, title, body, data=None, url=None):
         url: URL to open when notification is clicked
     
     Returns:
-        bool: True if successful, False otherwise
+        tuple: (success: bool, error_type: str or None)
+        error_type can be: 'unregistered', 'invalid', 'sender_id_mismatch', 'not_found', or 'other'
     """
     try:
         # Initialize Firebase if not already done
@@ -200,7 +360,7 @@ def send_fcm_notification(fcm_token, title, body, data=None, url=None):
         
         if _firebase_app is None:
             print("❌ Firebase not initialized, cannot send notification")
-            return False
+            return False, 'firebase_not_initialized'
         
         # Prepare notification payload
         notification = messaging.Notification(
@@ -223,26 +383,32 @@ def send_fcm_notification(fcm_token, title, body, data=None, url=None):
         # Send message
         response = messaging.send(message)
         print(f"✅ Successfully sent FCM notification: {response}")
-        return True
+        return True, None
         
     except messaging.UnregisteredError:
         print(f"❌ FCM token is invalid or unregistered: {fcm_token[:20]}...")
-        return False
+        print(f"   This token should be removed from the database")
+        return False, 'unregistered'
     except messaging.InvalidArgumentError as e:
         print(f"❌ Invalid FCM token or message: {e}")
-        return False
+        print(f"   Token: {fcm_token[:20]}...")
+        return False, 'invalid'
+    except messaging.SenderIdMismatchError:
+        print(f"❌ FCM token sender ID mismatch: {fcm_token[:20]}...")
+        print(f"   This token is from a different Firebase project")
+        return False, 'sender_id_mismatch'
     except firebase_admin.exceptions.NotFoundError as e:
         print(f"❌ Firebase project not found or FCM not enabled: {e}")
         print("   Please verify:")
         print("   1. Firebase project ID is correct")
         print("   2. FCM API is enabled in Firebase Console")
         print("   3. Service account has proper permissions")
-        return False
+        return False, 'not_found'
     except Exception as e:
         print(f"❌ Error sending FCM notification: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        return False, 'other'
 
 def send_fcm_notification_multicast(fcm_tokens, title, body, data=None, url=None):
     """

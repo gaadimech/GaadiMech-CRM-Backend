@@ -4762,7 +4762,7 @@ def send_push_notification(user_id, title, body, url=None):
                     print(f"   📤 Sending to {len(fcm_tokens)} FCM token(s) individually...")
                     for idx, token in enumerate(fcm_tokens):
                         print(f"   📤 Sending to token {idx + 1}/{len(fcm_tokens)}...")
-                        success = send_fcm_notification(
+                        success, error_type = send_fcm_notification(
                             fcm_token=token,
                             title=title,
                             body=body,
@@ -4774,10 +4774,13 @@ def send_push_notification(user_id, title, body, url=None):
                             print(f"   ✅ Token {idx + 1} sent successfully")
                         else:
                             failed_count += 1
-                            # Remove invalid token
+                            # Remove invalid token (only for certain error types that indicate permanent invalidity)
                             subscription = fcm_subscriptions[idx]
-                            print(f"   🗑️  Removing invalid FCM subscription {subscription.id}")
-                            db.session.delete(subscription)
+                            if error_type in ['unregistered', 'invalid', 'sender_id_mismatch']:
+                                print(f"   🗑️  Removing invalid FCM subscription {subscription.id} (error: {error_type})")
+                                db.session.delete(subscription)
+                            else:
+                                print(f"   ⚠️  Token {idx + 1} failed but keeping subscription (error: {error_type})")
                     
                     if failed_count > 0:
                         db.session.commit()
