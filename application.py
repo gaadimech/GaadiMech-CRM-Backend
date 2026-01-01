@@ -2996,6 +2996,62 @@ def update_user_password(user_id):
         print(f"Error updating password: {e}")
         return jsonify({'error': 'Failed to update password'}), 500
 
+@application.route('/api/admin/users/<int:user_id>', methods=['PUT', 'PATCH'])
+@login_required
+def update_user_details(user_id):
+    """Update user details (name, username, is_admin) - admin only"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        data = request.get_json()
+        user = User.query.get_or_404(user_id)
+
+        # Update username if provided
+        if 'username' in data:
+            new_username = data.get('username', '').strip()
+            if not new_username:
+                return jsonify({'error': 'Username cannot be empty'}), 400
+            
+            # Check if username is being changed and if new username already exists
+            if user.username != new_username:
+                existing_user = User.query.filter_by(username=new_username).first()
+                if existing_user and existing_user.id != user_id:
+                    return jsonify({'error': 'Username already exists'}), 400
+                user.username = new_username
+
+        # Update name if provided
+        if 'name' in data:
+            new_name = data.get('name', '').strip()
+            if not new_name:
+                return jsonify({'error': 'Name cannot be empty'}), 400
+            user.name = new_name
+
+        # Update is_admin if provided
+        if 'is_admin' in data:
+            # Prevent user from removing their own admin status
+            if user_id == current_user.id and data.get('is_admin') == False:
+                return jsonify({'error': 'You cannot remove your own admin privileges'}), 400
+            user.is_admin = bool(data.get('is_admin'))
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'User {user.username} updated successfully',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'name': user.name,
+                'is_admin': user.is_admin
+            }
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating user: {e}")
+        return jsonify({'error': 'Failed to update user'}), 500
+
 @application.route('/api/admin/leads-manipulation/search', methods=['GET'])
 @login_required
 def api_admin_leads_manipulation_search():
